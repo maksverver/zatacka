@@ -1,0 +1,66 @@
+All numbers are in network order.
+Maximum allowed packet: 4KB
+
+Packet format:
+ 2 bytes:       data size (> 0)
+ 1 byte:        packet type
+ (N-1) bytes:   other data
+
+Reliable packets: (client->server)
+   0 Hello
+        1 byte: protocol version (1)
+        1 byte: name length (L; 1 <= L < 20))
+        L bytes: name
+   1 Quit
+        no data
+
+Reliable packets: (server->client)
+  64 Message
+        1 byte: name length (L; L=0 means server)
+        L bytes: player name
+        rest: message
+
+  65 Disconnected
+        rest: message
+
+  66 Restart game
+        1 byte: data rate (moves per second)
+        1 byte: turn rate (moves required for 360 degree turn)
+        1 byte: move rate (in 1000th parts of the field per turn)
+        1 byte: backlog (number of moves to send in each packet)
+        1 byte: number of players (P)
+        1 byte: YOUR player id (id; 0 < id < P)
+
+        4 byte: game id
+
+        for each player:
+        3 bytes: color (R, G, B)
+        2 bytes: 65536*X position (0 <= X < 1)
+        2 bytes: 65536*Y position (0 <= Y < 1)
+        2 bytes: 65536/(2pi)*starting angle
+        1 byte: name length (N; 1 <= N < 20)
+        N bytes: name
+
+Unreliable packets: (client->serer)
+ 128 Moves
+        4 bytes: game id
+        4 bytes: timestamp
+        X bytes: moves (where X == backlog parameter)
+            1: move straight ahead
+            2: turn left
+            3: turn right
+
+Unreliable packets: (server->client)
+ 128 Moves
+        4 bytes: game id
+        4 bytes: timestamp
+        P bytes: player status (where P == number of players)
+            0 == dead
+            1 == living
+        Then for each living player:
+            X bytes: last moves (where X == backlog parameter)
+                0: unknown (all following bytes are 0 too)
+                1: move ahead
+                2: turn left
+                3: turn right
+                4: dead (all following bytes are 4 too)
