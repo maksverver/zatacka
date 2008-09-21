@@ -9,7 +9,7 @@ Packet format:
 Reliable packets: (client->server)
    0 Hello
         1 byte: protocol version (1)
-        1 byte: name length (L; 1 <= L < 20))
+        1 byte: name length (L; 1 <= L <= 20))
         L bytes: name
    1 Quit
         no data
@@ -51,7 +51,7 @@ Unreliable packets: (client->serer)
             3: turn right
 
 Unreliable packets: (server->client)
- 128 Moves
+ 192 Moves
         4 bytes: game id
         4 bytes: timestamp
         P bytes: player status (where P == number of players)

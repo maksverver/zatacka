@@ -35,7 +35,7 @@ static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliab
 }
 
 ClientSocket::ClientSocket(const char *hostname, int port)
-    : fd_stream(-1), fd_packet(-1)
+    : fd_stream(-1), fd_packet(-1), stream_pos(0)
 {
     info("Resolving host \"%s\"...", hostname);
     hostent *he = gethostbyname(hostname);
@@ -119,7 +119,7 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
     {
         unsigned char packet[4096];
         packet[0] = len>>8;
-        packet[1] = len>>8;
+        packet[1] = len&255;
         memcpy(packet + 2, buf, len);
         if (send(fd_stream, packet, len + 2, 0) != (ssize_t)len + 2)
         {
@@ -135,7 +135,7 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
     }
 }
 
-ssize_t ClientSocket::read(void *buf, size_t len)
+ssize_t ClientSocket::read(void *buf, size_t buf_len)
 {
     timeval tv = { 0, 0 };
 
@@ -146,9 +146,7 @@ ssize_t ClientSocket::read(void *buf, size_t len)
 
     /* nfds must be set to the highest numbered socket + 1 */
     int nfds = 1 + (fd_stream > fd_packet ? fd_stream : fd_packet);
-
     int res = select(nfds, &readfds, NULL, NULL, &tv);
-
     if (res < 0)
     {
         error("select() failed");
@@ -157,6 +155,42 @@ ssize_t ClientSocket::read(void *buf, size_t len)
 
     if (res == 0) return 0;
 
-    int s = FD_ISSET(fd_stream, &readfds) ? fd_stream : fd_packet;
-    return recv(s, buf, len, 0);
+    if (FD_ISSET(fd_stream, &readfds))
+    {
+        ssize_t len = recv(fd_stream, stream_buf + stream_pos, sizeof(stream_buf) - stream_pos, 0);
+        if (len < 0) return len;
+        if (len > 0)
+        {
+            stream_pos += len;
+            if (stream_pos >= 2)
+            {
+                size_t len = 256*stream_buf[0] + stream_buf[1];
+                if (len > sizeof(stream_buf) - 2)
+                {
+                    error("ClientSocket::read(): packet too large");
+                }
+                else
+                if (len < 1)
+                {
+                    error("ClientSocket::read(): packet too small");
+                }
+                else
+                if (stream_pos >= len + 2)
+                {
+                    if (len > buf_len) fatal("ClientSocket::read(): buffer too small");
+                    memcpy(buf, stream_buf + 2, len);
+                    memmove(stream_buf, stream_buf + len + 2, stream_pos - (len + 2));
+                    stream_pos -= len + 2;
+                    return len;
+                }
+            }
+        }
+    }
+
+    if (FD_ISSET(fd_packet, &readfds))
+    {
+        return recv(fd_packet, buf, buf_len, 0);
+    }
+
+    return 0;
 }

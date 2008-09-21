@@ -74,3 +74,42 @@ double time_now()
     (void)gettimeofday(&tv, NULL);
     return (tv.tv_sec - tv_start.tv_sec) + 1e-6*(tv.tv_usec - tv_start.tv_usec);
 }
+
+void hex_dump(unsigned char *buf, size_t len)
+{
+    size_t row, rows, i, n;
+
+    rows = len/16 + (len%16 != 0);
+    for (row = 0; row < rows; ++row)
+    {
+        printf("%04x  ", (int)(16*row));
+        for (n = 0; n < 16; ++n)
+        {
+            i = 16*row + n;
+            if (i < len)
+            {
+                printf("%02x ", buf[i]);
+            }
+            else
+            {
+                printf("   ");
+            }
+            if (n == 8) printf(" ");
+        }
+        printf("  ");
+        for (n = 0; n < 16; ++n)
+        {
+            i = 16*row + n;
+            if (i < len)
+            {
+                printf("%c", (buf[i] < 32 || buf[i] > 126 ? '.' : buf[i]));
+            }
+            else
+            {
+                printf("  ");
+            }
+            if (n == 8) printf(" ");
+        }
+        printf("\n");
+    }
+}

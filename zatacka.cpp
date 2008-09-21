@@ -1,7 +1,8 @@
-#include "Debug.h"
 #include "common.h"
+#include "Debug.h"
 #include "GameView.h"
 #include "ClientSocket.h"
+#include "Protocol.h"
 
 #define HZ 4
 
@@ -16,26 +17,57 @@ int g_backlog;          /* nubmer of moves to cache and send/receive */
 double x = 100, y = 100;
 double a = 0;
 
+static void handle_MESG(unsigned char *buf, size_t len)
+{
+    /* TODO */
+    (void)buf;
+    (void)len;
+    info("MESG received (TODO!)");
+}
+
+static void handle_DISC(unsigned char *buf, size_t len)
+{
+    info("Disconnected by server; reason:");
+    fwrite(buf + 1, 1, len - 1, stdout);
+    fputc('\n', stdout);
+    exit(0);
+}
+
+static void handle_STRT(unsigned char *buf, size_t len)
+{
+    /* TODO */
+    (void)buf;
+    (void)len;
+    info("STRT received (TODO!)");
+}
+
+
+static void handle_packet(unsigned char *buf, size_t len)
+{
+    info("packet type %d of length %d received", (int)buf[0], len);
+    hex_dump(buf, len);
+    switch ((int)buf[0])
+    {
+    case MRSC_MESG: return handle_MESG(buf, len);
+    case MRSC_DISC: return handle_DISC(buf, len);
+    case MRSC_STRT: return handle_STRT(buf, len);
+    default: error("invalid message type");
+    }
+}
 
 void callback(void *arg)
 {
     /* Read network input */
-    char buf[2048];
+    unsigned char buf[4096];
     ssize_t len;
-
-    len = g_cs->read(buf, sizeof(buf) - 1);
-    if (len > 0)
+    while ((len = g_cs->read(buf, sizeof(buf) - 1)) > 0)
     {
-        buf[len] = 0;
-        info("received: [%s]\n", buf);
+        handle_packet(buf, (size_t)len);
     }
-    if (len < 0)
-    {
-        error("socket read failed");
-    }
+    if (len < 0) error("socket read failed");
 
     /* Write network output */
-    g_cs->write("Tick!", 5, false);
+    /* g_cs->write("Tick!", 5, false); */
 
     if (Fl::event_key(FL_Left) && !Fl::event_key(FL_Right))
     {
@@ -61,6 +93,12 @@ void callback(void *arg)
     Fl::repeat_timeout(1.0/HZ, callback, arg);
 }
 
+static void disconnect()
+{
+    unsigned char msg[1] = { MRCS_QUIT };
+    if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
+}
+
 int main(int argc, char *argv[])
 {
     time_reset();
@@ -74,7 +112,7 @@ int main(int argc, char *argv[])
     }
 
     /* Send hello message */
-    g_cs->write("\x01\x04Maks", 6, true);
+    g_cs->write("\x00\x04Maks", 6, true);
 
     /* FIXME: make resolution and framerate configurable */
     int tmp;
@@ -84,5 +122,7 @@ int main(int argc, char *argv[])
     window->show(argc, argv);
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.5, callback, &tmp);
-    return Fl::run();
+    int res = Fl::run();
+    disconnect();
+    return res;
 }

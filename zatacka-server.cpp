@@ -1,4 +1,7 @@
 #include "Debug.h"
+#include "Protocol.h"
+#include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +11,21 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
+const int max_clients    =   64;
+const int server_fps     =    4;
+const int move_backlog   =   20;
 const int max_packet_len = 4094;
-const int max_name_len   = 20;
+const int max_name_len   =   20;
+
+const int data_rate      = server_fps;
+const int turn_rate      =   72;
+const int move_rate      =   10;
+
+
+struct RGB
+{
+    unsigned char r, g, b;
+};
 
 struct Client
 {
@@ -24,23 +40,154 @@ struct Client
     unsigned char   buf[max_packet_len + 2];
     int             buf_pos;
 
+    /* Move buffer */
+    int             timestamp;
+    int             moves[move_backlog];
+
     /* Player info */
+    bool            player, alive;
     char            name[max_name_len + 1];
+    RGB             color;
+    double          x, y, a;    /* 0 <= x,y < 1; 0 < a <= 2pi */
 };
 
 /* Globals */
-static const int max_clients = 64;
-static int g_fd_listen; /* Stream data listening socket */
-static int g_fd_packet; /* Packet data socket */
-static Client clients[max_clients];
+static int g_fd_listen;         /* Stream data listening socket */
+static int g_fd_packet;         /* Packet data socket */
+static int g_timestamp;         /* Time counter */
+static int g_num_clients;       /* Number of connected clients */
+static int g_num_players;       /* Number of people ready to play */
+static int g_num_alive;         /* Number of people still alive */
+
+static Client g_clients[max_clients];
+static Client *g_players[max_clients];
+
+/* Hue assumed to be in range [0,1) */
+static RGB rgb_from_hue(double hue)
+{
+    RGB res;
+
+    if (hue < 0 || hue >= 1)
+    {
+        res.r = res.g = res.b = 128;
+    }
+    else
+    if (hue < 1/3.0)
+    {
+        res.r = (int)(255*3.0*(1/3.0 - hue));
+        res.g = (int)(255*3.0*(hue));
+        res.b = 0;
+    }
+    else
+    if (hue < 2/3.0)
+    {
+        res.r = 0;
+        res.g = (int)(255*3.0*(hue - 1/3.0));
+        res.b = (int)(255*3.0*(2/3.0 - hue));
+    }
+    else
+    {
+        res.r = (int)(255*3.0*(1.0 - hue));
+        res.g = 0;
+        res.b = (int)(255*3.0*(hue - 2/3.0));
+    }
+
+    return res;
+}
+
+static void disconnect(int c, const char *reason);
+
+static void client_send(int c, const void *buf, size_t len, bool reliable)
+{
+    assert(len < (size_t)max_packet_len);
+    if (reliable)
+    {
+        unsigned char packet[max_packet_len + 2];
+        packet[0] = len>>8;
+        packet[1] = len&255;
+        memcpy(packet + 2, buf, len);
+        if (send(g_clients[c].fd_stream, packet, len + 2, 0) != (ssize_t)len + 2)
+        {
+            error("reliable send() failed");
+            disconnect(c, NULL);
+        }
+    }
+    else
+    {
+        if (sendto( g_fd_packet, buf, len, 0,
+                    (sockaddr*)&g_clients[c].sa_remote,
+                    sizeof(g_clients[c].sa_remote) ) != (ssize_t)len)
+        {
+            warn("unreliable send() failed");
+        }
+    }
+}
 
 static void disconnect(int c, const char *reason)
 {
+    if (!g_clients[c].in_use) return;
+
     info( "disconnecting client %d at %s:%d (reason: %s)",
-          c, inet_ntoa(clients[c].sa_remote.sin_addr),
-          ntohs(clients[c].sa_remote.sin_port), reason );
-    close(clients[c].fd_stream);
-    clients[c].in_use = false;
+          c, inet_ntoa(g_clients[c].sa_remote.sin_addr),
+          ntohs(g_clients[c].sa_remote.sin_port), reason );
+    g_clients[c].in_use = false;
+    if (reason != NULL)
+    {
+        unsigned char packet[max_packet_len];
+        size_t len = strlen(reason);
+        if (len > max_packet_len - 1) len = max_packet_len - 1;
+        packet[0] = MRSC_DISC;
+        memcpy(packet + 1, reason, len);
+        client_send(c, packet, len + 1, true);
+    }
+    close(g_clients[c].fd_stream);
+    g_num_clients -= 1;
+    g_num_players -= g_clients[c].player;
+    g_num_alive   -= g_clients[c].alive;
+}
+
+
+static void handle_HELO(int c, unsigned char *buf, size_t len)
+{
+    Client &cl = g_clients[c];
+
+    /* Can only send this once! */
+    if (cl.player) return;
+
+    /* Verify packet data */
+    int L = len > 1 ? buf[1] : 0;
+    if (L < 1 || L > max_name_len || L + 2 > (int)len)
+    {
+        disconnect(c, "(HELO) invalid name length");
+        return;
+    }
+    for (int n = 0; n < L; ++n)
+    {
+        if (buf[2 + n] < 32 || buf[2 + n] > 126)
+        {
+            disconnect(c, "(HELO) invalid name character");
+            return;
+        }
+    }
+
+    /* Assign player name */
+    memcpy(cl.name, buf + 2, L);
+    cl.name[L] = '\0';
+
+    /* Check availability of name */
+    for (int n = 0; n < max_clients; ++n)
+    {
+        if (n == c || !g_clients[n].in_use) continue;
+        if (strcmp(cl.name, g_clients[n].name) == 0)
+        {
+            disconnect(c, "(HELO) name unavailable");
+            return;
+        }
+    }
+
+    /* Enable player */
+    cl.player = true;
+    g_num_players += 1;
 }
 
 static void handle_packet( int c, unsigned char *buf, size_t len,
@@ -48,22 +195,116 @@ static void handle_packet( int c, unsigned char *buf, size_t len,
 {
     info( "%s packet type %d of length %d received from client #%d",
           reliable ? "reliable" : "unreliable", (int)buf[0], len, c );
-
+    hex_dump(buf, len);
     switch ((int)buf[0])
     {
-    case 0:
-        break;
-
-    default:
-        disconnect(c, "invalid packet type");
-        break;
+    case MRCS_HELO: return handle_HELO(c, buf, len);
+    case MRCS_QUIT: return disconnect(c, "client quit");
+    default: disconnect(c, "invalid packet type");
     }
+}
+
+static void restart_game()
+{
+    g_timestamp = 0;
+    time_reset();
+
+    if (g_num_players == 0) return;
+
+    info("Starting game with %d players", g_num_players);
+    int i = 0;
+    for (int n = 0; n < max_clients; ++n)
+    {
+        if (!g_clients[n].in_use || !g_clients[n].player) continue;
+        g_clients[n].alive = true;
+        g_clients[n].color = rgb_from_hue((double)i/g_num_players);
+        g_clients[n].x = (double)RAND_MAX/rand();
+        g_clients[n].y = (double)RAND_MAX/rand();
+        g_clients[n].a = 2.0*M_PI*RAND_MAX/rand();
+        info("%f %f %f\n",g_clients[n].x, g_clients[n].y, g_clients[n].a);
+        g_players[i] = &g_clients[n];
+        ++i;
+    }
+    assert(i == g_num_players);
+    g_num_alive = g_num_players;
+
+    /* Build start game packet */
+    unsigned char packet[max_packet_len];
+    size_t pos = 0;
+    packet[pos++] = MRSC_STRT;
+    packet[pos++] = data_rate;
+    packet[pos++] = turn_rate;
+    packet[pos++] = move_rate;
+    packet[pos++] = move_backlog;
+    packet[pos++] = g_num_players;
+    packet[pos++] = 0;
+    packet[pos++] = 0;
+    packet[pos++] = 0;
+    packet[pos++] = 0;
+    packet[pos++] = 0;
+    /* FIXME: possible buffer overflow here, depending on server parameters */
+    for (int i = 0; i < g_num_players; ++i)
+    {
+        Client &cl = *g_players[i];
+        packet[pos++] = cl.color.r;
+        packet[pos++] = cl.color.g;
+        packet[pos++] = cl.color.b;
+        int x = (int)(cl.x*65536);
+        int y = (int)(cl.y*65536);
+        int a = (int)(cl.a/(2.0*M_PI)*65536);
+        packet[pos++] = (x>>8)&255;
+        packet[pos++] = (x>>0)&255;
+        packet[pos++] = (y>>8)&255;
+        packet[pos++] = (y>>0)&255;
+        packet[pos++] = (a>>8)&255;
+        packet[pos++] = (a>>0)&255;
+        size_t name_len = strlen(cl.name);
+        packet[pos++] = name_len;
+        memcpy(&packet[pos], cl.name, name_len);
+        pos += name_len;
+    }
+
+    /* Send start packet to all players */
+    for (int i = 0; i < g_num_players; ++i)
+    {
+        Client &cl = *g_players[i];
+        packet[6] = i;
+        client_send(&cl - g_clients, packet, pos, true);
+    }
+}
+
+static void do_frame()
+{
+    if (g_num_players == 0) return;
+
+    if (g_num_alive == 0) restart_game();
 }
 
 static int run()
 {
     for (;;)
     {
+        /* Compute time to next tick */
+        double delay = (double)g_timestamp/server_fps - time_now();
+        if (delay <= 0)
+        {
+            do_frame();
+            delay += (double)1/server_fps;
+            g_timestamp += 1;
+        }
+
+        /* Calculcate select time-out */
+        struct timeval timeout;
+        if (delay <= 0)
+        {
+            timeout.tv_sec = timeout.tv_usec = 0;
+        }
+        else
+        {
+            timeout.tv_sec  = (int)delay;
+            timeout.tv_usec = (int)(1e6*(delay - timeout.tv_sec));
+        }
+
         /* Prepare file selectors to select on */
         fd_set readfds;
         FD_ZERO(&readfds);
@@ -72,21 +313,19 @@ static int run()
         int max_fd = g_fd_listen > g_fd_packet ? g_fd_listen : g_fd_packet;
         for (int n = 0; n < max_clients; ++n)
         {
-            if (!clients[n].in_use) continue;
-            FD_SET(clients[n].fd_stream, &readfds);
-            if (clients[n].fd_stream > max_fd) max_fd = clients[n].fd_stream;
+            if (!g_clients[n].in_use) continue;
+            FD_SET(g_clients[n].fd_stream, &readfds);
+            if (g_clients[n].fd_stream > max_fd) max_fd = g_clients[n].fd_stream;
         }
 
-        /* Select readable file descriptors (wait infinitely) */
-        int ready = select(max_fd + 1, &readfds, NULL, NULL, NULL);
-        if (ready == 0)
-        {
-            fatal("select() time-out; shouldn't happen");
-        }
+        /* Select readable file descriptors (or wait until next tick) */
+        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
         if (ready < 0)
         {
             fatal("select() failed");
         }
+
+        if (ready == 0) continue;
 
         /* Accept new connections */
         if (FD_ISSET(g_fd_listen, &readfds))
@@ -107,7 +346,7 @@ static int run()
             else
             {
                 int n = 0;
-                while (n < max_clients && clients[n].in_use) ++n;
+                while (n < max_clients && g_clients[n].in_use) ++n;
                 if (n == max_clients)
                 {
                     warn( "No client slot free; rejecting connection from %s:%d",
@@ -117,12 +356,13 @@ static int run()
                 else
                 {
                     /* Initialize new client slot */
-                    memset(&clients[n], 0, sizeof(clients[n]));
-                    clients[n].in_use    = true;
-                    clients[n].sa_remote = sa;
-                    clients[n].fd_stream = fd;
+                    memset(&g_clients[n], 0, sizeof(g_clients[n]));
+                    g_clients[n].in_use    = true;
+                    g_clients[n].sa_remote = sa;
+                    g_clients[n].fd_stream = fd;
                     info( "Accepted client from %s:%d in slot #%d",
                           inet_ntoa(sa.sin_addr), ntohs(sa.sin_port), n );
+                    g_num_clients += 1;
                 }
             }
         }
@@ -157,10 +397,10 @@ static int run()
                 int c = -1;
                 for (int n = 0; n < max_clients; ++n)
                 {
-                    if ( clients[n].in_use &&
-                         clients[n].sa_remote.sin_addr.s_addr ==
+                    if ( g_clients[n].in_use &&
+                         g_clients[n].sa_remote.sin_addr.s_addr ==
                             sa.sin_addr.s_addr &&
-                         clients[n].sa_remote.sin_port == sa.sin_port )
+                         g_clients[n].sa_remote.sin_port == sa.sin_port )
                     {
                         c = n;
                         break;
@@ -181,32 +421,38 @@ static int run()
         /* Accept incoming stream packets */
         for (int n = 0; n < max_clients; ++n)
         {
-            if (!clients[n].in_use) continue;
-            if (!FD_ISSET(clients[n].fd_stream, &readfds)) continue;
+            if (!g_clients[n].in_use) continue;
+            if (!FD_ISSET(g_clients[n].fd_stream, &readfds)) continue;
 
             ssize_t read = recv(
-                clients[n].fd_stream, clients[n].buf + clients[n].buf_pos,
-                sizeof(clients[n].buf) - clients[n].buf_pos, 0 );
+                g_clients[n].fd_stream, g_clients[n].buf + g_clients[n].buf_pos,
+                sizeof(g_clients[n].buf) - g_clients[n].buf_pos, 0 );
             if (read <= 0)
             {
                 disconnect(n, read == 0 ? "EOF reached" : "recv() failed");
             }
             else
             {
-                clients[n].buf_pos += read;
-                if (clients[n].buf_pos >= 2)
+                g_clients[n].buf_pos += read;
+                if (g_clients[n].buf_pos >= 2)
                 {
-                    int len = 256*clients[n].buf[0] + clients[n].buf[1];
+                    int len = 256*g_clients[n].buf[0] + g_clients[n].buf[1];
                     if (len > max_packet_len)
                     {
                         disconnect(n, "packet too large");
                     }
-                    if (clients[n].buf_pos >= len)
+                    else
+                    if (len < 1)
                     {
-                        handle_packet(n, clients[n].buf, len, true);
-                        memmove( clients[n].buf, clients[n].buf + len,
-                                 clients[n].buf_pos - len );
-                        clients[n].buf_pos -= len;
+                        disconnect(n, "packet too small");
+                    }
+                    else
+                    if (g_clients[n].buf_pos >= len + 2)
+                    {
+                        handle_packet(n, g_clients[n].buf + 2, len, true);
+                        memmove( g_clients[n].buf, g_clients[n].buf + len + 2,
+                                 g_clients[n].buf_pos - len - 2);
+                        g_clients[n].buf_pos -= len + 2;
                     }
                 }
             }

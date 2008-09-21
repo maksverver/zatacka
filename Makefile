@@ -11,9 +11,9 @@ zatacka: $(OBJS) zatacka.o
 	$(CXX) $(LDFLAGS) -o zatacka $(OBJS) zatacka.o
 
 clean:
-	rm -f $(OBJS) zatacka.o zata-server.o
+	rm -f $(OBJS) zatacka.o zatacka-server.o
 
 distclean: clean
-	rm -f zatacka
+	rm -f zatacka zatacka-server
 
 .PHONY: all clean distclean

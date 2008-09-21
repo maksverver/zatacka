@@ -19,6 +19,9 @@ public:
 private:
     int fd_stream;
     int fd_packet;
+
+    unsigned char stream_buf[4096];
+    size_t stream_pos;
 };
 
 #endif /* ndef CLIENT_SOCKET_H_INCLUDED */
