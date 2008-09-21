@@ -15,6 +15,8 @@ GameView::~GameView()
 
 void GameView::draw()
 {
+    fl_push_clip(x(), y(), w(), h());
+
     if (!offscr_created)
     {
         offscr = fl_create_offscreen(w(), h());
@@ -33,29 +35,31 @@ void GameView::draw()
     {
         fl_push_matrix();
         fl_translate(sprites[n].x, sprites[n].y);
-        fl_rotate(sprites[n].a);
+        fl_rotate(180/M_PI*sprites[n].a);
         fl_color(sprites[n].col);
         fl_begin_polygon();
-        fl_vertex(-7,  7);
-        fl_vertex( 7,  0);
-        fl_vertex(-7, -7);
+        fl_vertex( -9,  7);
+        fl_vertex(  9,  0);
+        fl_vertex( -9, -7);
         fl_end_polygon();
         fl_pop_matrix();
     }
+
+    fl_pop_clip();
 }
 
 void GameView::plot(int x, int y, Fl_Color c)
 {
     fl_begin_offscreen(offscr);
     fl_color(c);
-    fl_pie(x - 4, y - 4, 8, 8, 0, 360);
+    fl_pie(x - 3, y - 3, 6, 6, 0, 360);
     fl_end_offscreen();
-    damage(1, x - 4, y - 4, 8, 8);
+    damage(1, x - 3, y - 3, 6, 6);
 }
 
 void GameView::damageSprite(int n)
 {
-    damage(1, sprites[n].x - 10, sprites[n].y - 10, 20, 20);
+    damage(1, sprites[n].x - 12, sprites[n].y - 12, 24, 24);
 }
 
 void GameView::setSprite(int n, int x, int y, double a, Fl_Color col)

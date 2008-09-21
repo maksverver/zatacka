@@ -12,15 +12,14 @@
 #include <sys/select.h>
 
 const int max_clients    =   64;
-const int server_fps     =    4;
+const int server_fps     =   40;
 const int move_backlog   =   20;
 const int max_packet_len = 4094;
 const int max_name_len   =   20;
 
 const int data_rate      = server_fps;
 const int turn_rate      =   72;
-const int move_rate      =   10;
-
+const int move_rate      =    5;
 
 struct RGB
 {
@@ -42,7 +41,7 @@ struct Client
 
     /* Move buffer */
     int             timestamp;
-    int             moves[move_backlog];
+    char            moves[move_backlog];
 
     /* Player info */
     bool            player, alive;
@@ -58,7 +57,7 @@ static int g_timestamp;         /* Time counter */
 static int g_num_clients;       /* Number of connected clients */
 static int g_num_players;       /* Number of people ready to play */
 static int g_num_alive;         /* Number of people still alive */
-
+static unsigned g_gameid;
 static Client g_clients[max_clients];
 static Client *g_players[max_clients];
 
@@ -82,14 +81,14 @@ static RGB rgb_from_hue(double hue)
     if (hue < 2/3.0)
     {
         res.r = 0;
-        res.g = (int)(255*3.0*(hue - 1/3.0));
-        res.b = (int)(255*3.0*(2/3.0 - hue));
+        res.g = (int)(255*3.0*(2/3.0 - hue));
+        res.b = (int)(255*3.0*(hue - 1/3.0));
     }
     else
     {
-        res.r = (int)(255*3.0*(1.0 - hue));
+        res.r = (int)(255*3.0*(hue - 2/3.0));
         res.g = 0;
-        res.b = (int)(255*3.0*(hue - 2/3.0));
+        res.b = (int)(255*3.0*(1.0 - hue));
     }
 
     return res;
@@ -106,7 +105,8 @@ static void client_send(int c, const void *buf, size_t len, bool reliable)
         packet[0] = len>>8;
         packet[1] = len&255;
         memcpy(packet + 2, buf, len);
-        if (send(g_clients[c].fd_stream, packet, len + 2, 0) != (ssize_t)len + 2)
+        if ( send(g_clients[c].fd_stream, packet, len + 2, MSG_DONTWAIT)
+             != (ssize_t)len + 2 )
         {
             error("reliable send() failed");
             disconnect(c, NULL);
@@ -114,7 +114,7 @@ static void client_send(int c, const void *buf, size_t len, bool reliable)
     }
     else
     {
-        if (sendto( g_fd_packet, buf, len, 0,
+        if (sendto( g_fd_packet, buf, len, MSG_DONTWAIT,
                     (sockaddr*)&g_clients[c].sa_remote,
                     sizeof(g_clients[c].sa_remote) ) != (ssize_t)len)
         {
@@ -144,8 +144,15 @@ static void disconnect(int c, const char *reason)
     g_num_clients -= 1;
     g_num_players -= g_clients[c].player;
     g_num_alive   -= g_clients[c].alive;
+    g_clients[c].alive = g_clients[c].player = false;
 }
 
+static void kill_player(int c)
+{
+    info("Client %c died.", c);
+    g_num_alive -= g_clients[c].alive;
+    g_clients[c].alive = false;
+}
 
 static void handle_HELO(int c, unsigned char *buf, size_t len)
 {
@@ -184,10 +191,73 @@ static void handle_HELO(int c, unsigned char *buf, size_t len)
             return;
         }
     }
+}
 
-    /* Enable player */
-    cl.player = true;
-    g_num_players += 1;
+static void handle_MOVE(int c, unsigned char *buf, size_t len)
+{
+    Client &cl = *g_players[c];
+
+    if (len != 9 + move_backlog)
+    {
+        error( "(MOVE) invalid length packet received from client %d "
+               "(received %d; expected %d)", c, len, 9 + move_backlog);
+        return;
+    }
+    unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
+    if (gameid != g_gameid)
+    {
+        warn( "(MOVE) packet with invalid game id from client %d "
+              "(received %d; expected %d)", c, gameid, g_gameid);
+        return;
+    }
+
+    int timestamp = (buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | buf[8];
+    if (timestamp > g_timestamp + 1)
+    {
+        error("(MOVE) timestamp too great");
+        return;
+    }
+
+    if (timestamp <= cl.timestamp)
+    {
+        warn("(MOVE) discarded out-of-order move packet");
+        return;
+    }
+
+    int added = timestamp - cl.timestamp;
+    assert(added >= 0 && added <= move_backlog);
+    memmove(cl.moves, cl.moves + added, move_backlog - added);
+    memcpy( cl.moves + move_backlog - added,
+            buf + 9 + move_backlog - added, added );
+
+    for (int n = move_backlog - added; n < move_backlog; ++n)
+    {
+        if (!cl.alive)
+        {
+            cl.moves[n] = 0;
+            continue;
+        }
+
+        int m = cl.moves[n];
+        if (m < 1 || m > 3)
+        {
+            error("Invalid move %d received from client %d\n", m, c);
+            kill_player(c);
+        }
+        else
+        {
+            if (m == 2) cl.a += 2.0*M_PI/turn_rate;
+            if (m == 3) cl.a -= 2.0*M_PI/turn_rate;
+            cl.x += 1e-3*move_rate*cos(cl.a);
+            cl.y += 1e-3*move_rate*sin(cl.a);
+            if ( cl.x < 0 || cl.x >= 1 || cl.y < 0 || cl.y >= 1 )
+            {
+                kill_player(c);
+            }
+        }
+    }
+    g_players[c]->timestamp += added;
+    assert(g_players[c]->timestamp == timestamp);
 }
 
 static void handle_packet( int c, unsigned char *buf, size_t len,
@@ -200,6 +270,7 @@ static void handle_packet( int c, unsigned char *buf, size_t len,
     {
     case MRCS_HELO: return handle_HELO(c, buf, len);
     case MRCS_QUIT: return disconnect(c, "client quit");
+    case MUCS_MOVE: return handle_MOVE(c, buf, len);
     default: disconnect(c, "invalid packet type");
     }
 }
@@ -209,24 +280,40 @@ static void restart_game()
     g_timestamp = 0;
     time_reset();
 
-    if (g_num_players == 0) return;
+    if (g_num_clients == 0) return;
 
-    info("Starting game with %d players", g_num_players);
     int i = 0;
     for (int n = 0; n < max_clients; ++n)
     {
-        if (!g_clients[n].in_use || !g_clients[n].player) continue;
+        if (!g_clients[n].in_use || !g_clients[n].name[0]) continue;
+
+        if (!g_clients[n].player)
+        {
+            /* Enable player */
+            g_clients[n].player = true;
+            g_num_players += 1;
+        }
         g_clients[n].alive = true;
         g_clients[n].color = rgb_from_hue((double)i/g_num_players);
-        g_clients[n].x = (double)RAND_MAX/rand();
-        g_clients[n].y = (double)RAND_MAX/rand();
-        g_clients[n].a = 2.0*M_PI*RAND_MAX/rand();
-        info("%f %f %f\n",g_clients[n].x, g_clients[n].y, g_clients[n].a);
+        g_clients[n].x = 0.1 + 0.8*rand()/RAND_MAX;
+        g_clients[n].y = 0.1 + 0.8*rand()/RAND_MAX;
+        g_clients[n].a = 2.0*M_PI*rand()/RAND_MAX;
+        g_clients[n].timestamp = 0;
+        memset(g_clients[n].moves, 0, sizeof(g_clients[n].moves));
         g_players[i] = &g_clients[n];
         ++i;
     }
     assert(i == g_num_players);
     g_num_alive = g_num_players;
+
+    if (g_num_players == 0) return;
+
+    info("Starting game with %d players", g_num_players);
+
+    g_gameid = ((rand()&255) << 24) |
+               ((rand()&255) << 16) |
+               ((rand()&255) <<  8) |
+               ((rand()&255) <<  0);
 
     /* Build start game packet */
     unsigned char packet[max_packet_len];
@@ -238,10 +325,10 @@ static void restart_game()
     packet[pos++] = move_backlog;
     packet[pos++] = g_num_players;
     packet[pos++] = 0;
-    packet[pos++] = 0;
-    packet[pos++] = 0;
-    packet[pos++] = 0;
-    packet[pos++] = 0;
+    packet[pos++] = (g_gameid>>24)&255;
+    packet[pos++] = (g_gameid>>16)&255;
+    packet[pos++] = (g_gameid>> 8)&255;
+    packet[pos++] = (g_gameid>> 0)&255;
     /* FIXME: possible buffer overflow here, depending on server parameters */
     for (int i = 0; i < g_num_players; ++i)
     {
@@ -273,11 +360,68 @@ static void restart_game()
     }
 }
 
+static void make_current(int c)
+{
+    Client &cl = g_clients[c];
+    int backlog = g_timestamp - cl.timestamp;
+    assert(backlog >= 0);
+    if (backlog >= move_backlog)
+    {
+        cl.alive = false;
+        disconnect(c, "out of sync");
+    }
+
+    if (backlog > 0)
+    {
+        memmove(cl.moves, cl.moves + backlog, move_backlog - backlog);
+        for (int n = move_backlog - backlog; n < move_backlog; ++n)
+        {
+            cl.moves[n] = 0;
+        }
+        cl.timestamp = g_timestamp;
+    }
+}
+
 static void do_frame()
 {
+    if (g_num_clients == 0) return;
+    if (g_num_alive == 0) restart_game();
     if (g_num_players == 0) return;
 
-    if (g_num_alive == 0) restart_game();
+    /* Move all commands forward to current time */
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        make_current(g_players[n] - g_clients);
+    }
+
+    /* Send moves packet to all players */
+    unsigned char packet[4096];
+    /* FIXME: possible buffer overflow here, depending on server parameters */
+    size_t pos = 0;
+    packet[pos++] = MUSC_MOVE;
+    packet[pos++] = (g_gameid >> 24)&255;
+    packet[pos++] = (g_gameid >> 16)&255;
+    packet[pos++] = (g_gameid >>  8)&255;
+    packet[pos++] = (g_gameid >>  0)&255;
+    packet[pos++] = (g_timestamp >> 24)&255;
+    packet[pos++] = (g_timestamp >> 16)&255;
+    packet[pos++] = (g_timestamp >>  8)&255;
+    packet[pos++] = (g_timestamp >>  0)&255;
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        make_current(g_players[n] - g_clients);
+        packet[pos++] = g_players[n]->alive ? 1 : 0;
+    }
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        if (!g_players[n]->alive) continue;
+        memcpy(packet + pos, g_players[n]->moves, move_backlog);
+        pos += move_backlog;
+    }
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        client_send(g_players[n] - g_clients, packet, pos, false);
+    }
 }
 
 static int run()

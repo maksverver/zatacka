@@ -41,7 +41,7 @@ Reliable packets: (server->client)
         1 byte: name length (N; 1 <= N < 20)
         N bytes: name
 
-Unreliable packets: (client->serer)
+Unreliable packets: (client->server)
  128 Moves
         4 bytes: game id
         4 bytes: timestamp
@@ -59,8 +59,11 @@ Unreliable packets: (server->client)
             1 == living
         Then for each living player:
             X bytes: last moves (where X == backlog parameter)
-                0: unknown (all following bytes are 0 too)
+                0: unknown
                 1: move ahead
                 2: turn left
                 3: turn right
-                4: dead (all following bytes are 4 too)
+           NB. the bytes correspond to commands given for timeslot
+               timestamp-X through timestamp-1 (inclusive); for negative
+               timeslots, moves are set to 0. When moves are not (yet) known,
+               moves at the end of the list are set to 0 as well.

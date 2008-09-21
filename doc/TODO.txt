@@ -1,2 +1,15 @@
+General:
+ - allow multiple controls per player
+ - port to windows
+
+Client:
+ - make resolution configurable
+ - support full-screen
+
 Server:
- - make outgoing sockets non-blocking
+ - kill player that intersects a path
+
+Bug:
+ - when a player dies, the server stops sending moves, 
+   including past moves which may be required by other clients to
+   draw the playfield correctly.
