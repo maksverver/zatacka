@@ -72,7 +72,9 @@ int main(int argc, char *argv[])
         error("Couldn't connect to server.");
         return 1;
     }
-    g_cs->write("Hello world!\r\n", 14, true);
+
+    /* Send hello message */
+    g_cs->write("\x01\x04Maks", 6, true);
 
     /* FIXME: make resolution and framerate configurable */
     int tmp;

@@ -1,6 +1,7 @@
 #include "ClientSocket.h"
 #include "Debug.h"
 #include <netdb.h>
+#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -67,10 +68,25 @@ ClientSocket::ClientSocket(const char *hostname, int port)
     sa_local.sin_addr.s_addr = INADDR_ANY;
 
     fd_stream = ip_connect(sa_local, sa_remote, true);
-    fd_packet = ip_connect(sa_local, sa_remote, false);
+    if (fd_stream < 0)
+    {
+        error("TCP connection failed");
+    }
+    else
+    {
+        socklen_t len = sizeof(sa_local);
+        if (getsockname(fd_stream, (sockaddr*)&sa_local, &len) != 0)
+        {
+            error("getsockname() failed");
+        }
 
-    if (fd_stream < 0) error("TCP connection failed");
-    if (fd_packet < 0) error("UDP connection failed");
+        fd_packet = ip_connect(sa_local, sa_remote, false);
+        if (fd_packet < 0)
+        {
+            error("UDP connection failed");
+        }
+    }
+
     if (fd_stream >= 0 && fd_packet >= 0) info("Connected! Local port: %d", ntohs(sa_local.sin_port));
 }
 
@@ -93,9 +109,29 @@ bool ClientSocket::connected() const
 
 void ClientSocket::write(void const *buf, size_t len, bool reliable)
 {
-    if (send(reliable ? fd_stream : fd_packet, buf, len, 0) != (ssize_t)len)
+    if (len > 4094)
     {
-        error("%s send() failed", reliable ? "reliable" : "unreliable");
+        error("ClientSocket::write(): packet too large");
+        return;
+    }
+
+    if (reliable)
+    {
+        unsigned char packet[4096];
+        packet[0] = len>>8;
+        packet[1] = len>>8;
+        memcpy(packet + 2, buf, len);
+        if (send(fd_stream, packet, len + 2, 0) != (ssize_t)len + 2)
+        {
+            error("reliable send() failed");
+        }
+    }
+    else
+    {
+        if (send(fd_packet, buf, len, 0) != (ssize_t)len)
+        {
+            warn("unreliable send() failed");
+        }
     }
 }
 

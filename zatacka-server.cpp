@@ -8,7 +8,8 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
-const int max_packet_len = 4096;
+const int max_packet_len = 4094;
+const int max_name_len   = 20;
 
 struct Client
 {
@@ -20,8 +21,11 @@ struct Client
 
     /* Streaming data */
     int             fd_stream;
-    unsigned char   buf[max_packet_len];
-    size_t          buf_pos;
+    unsigned char   buf[max_packet_len + 2];
+    int             buf_pos;
+
+    /* Player info */
+    char            name[max_name_len + 1];
 };
 
 /* Globals */
@@ -30,13 +34,6 @@ static int g_fd_listen; /* Stream data listening socket */
 static int g_fd_packet; /* Packet data socket */
 static Client clients[max_clients];
 
-static void handle_packet( int c, unsigned char *buf, size_t len,
-                           bool reliable )
-{
-    info( "%s packet of length %d received from client #%d",
-          reliable ? "reliable" : "unreliable", len, c );
-}
-
 static void disconnect(int c, const char *reason)
 {
     info( "disconnecting client %d at %s:%d (reason: %s)",
@@ -44,6 +41,23 @@ static void disconnect(int c, const char *reason)
           ntohs(clients[c].sa_remote.sin_port), reason );
     close(clients[c].fd_stream);
     clients[c].in_use = false;
+}
+
+static void handle_packet( int c, unsigned char *buf, size_t len,
+                           bool reliable )
+{
+    info( "%s packet type %d of length %d received from client #%d",
+          reliable ? "reliable" : "unreliable", (int)buf[0], len, c );
+
+    switch ((int)buf[0])
+    {
+    case 0:
+        break;
+
+    default:
+        disconnect(c, "invalid packet type");
+        break;
+    }
 }
 
 static int run()
@@ -118,7 +132,7 @@ static int run()
         {
             sockaddr_in sa;
             socklen_t sa_len = sizeof(sa);
-            unsigned char buf[max_packet_len - 2];
+            unsigned char buf[max_packet_len];
             ssize_t buf_len;
 
             buf_len = recvfrom( g_fd_packet, buf, sizeof(buf), 0,
@@ -182,8 +196,8 @@ static int run()
                 clients[n].buf_pos += read;
                 if (clients[n].buf_pos >= 2)
                 {
-                    size_t len = 256*clients[n].buf[0] + clients[n].buf[1];
-                    if (len > max_packet_len - 2)
+                    int len = 256*clients[n].buf[0] + clients[n].buf[1];
+                    if (len > max_packet_len)
                     {
                         disconnect(n, "packet too large");
                     }
