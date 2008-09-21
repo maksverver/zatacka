@@ -1,8 +1,8 @@
 All numbers are in network order.
-Maximum allowed packet: 4KB
+Maximum allowed packet (incl. 2 byte header) 4KB
 
 Packet format:
- 2 bytes:       data size (> 0)
+ 2 bytes:       data size (S; 1 <= S <= 4094)   (stream packet only)
  1 byte:        packet type
  (N-1) bytes:   other data
 

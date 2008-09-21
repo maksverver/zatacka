@@ -1,14 +1,17 @@
 CXXFLAGS=-g -Wall -Wextra -ansi `fltk-config --cxxflags`
 LDFLAGS=`fltk-config --ldflags`
-OBJS=main.o GameView.o ClientSocket.o Debug.o
+OBJS=GameView.o ClientSocket.o Debug.o
 
-all: zatacka
+all: zatacka zatacka-server
 
-zatacka: $(OBJS)
-	$(CXX) $(LDFLAGS) -o zatacka $(OBJS)
+zatacka-server: $(OBJS) zatacka-server.o
+	$(CXX) $(LDFLAGS) -o zatacka-server $(OBJS) zatacka-server.o
+
+zatacka: $(OBJS) zatacka.o
+	$(CXX) $(LDFLAGS) -o zatacka $(OBJS) zatacka.o
 
 clean:
-	rm -f $(OBJS)
+	rm -f $(OBJS) zatacka.o zata-server.o
 
 distclean: clean
 	rm -f zatacka

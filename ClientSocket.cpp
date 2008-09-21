@@ -1,13 +1,12 @@
 #include "ClientSocket.h"
 #include "Debug.h"
+#include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <unistd.h>
 #include <sys/select.h>
 
-#include <stdio.h>
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
     int s = socket(PF_INET, reliable ? SOCK_STREAM : SOCK_DGRAM, 0);
@@ -123,6 +122,5 @@ ssize_t ClientSocket::read(void *buf, size_t len)
     if (res == 0) return 0;
 
     int s = FD_ISSET(fd_stream, &readfds) ? fd_stream : fd_packet;
-    printf("%d %d\n", FD_ISSET(fd_stream, &readfds), FD_ISSET(fd_packet, &readfds));
     return recv(s, buf, len, 0);
 }

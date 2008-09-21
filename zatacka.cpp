@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     time_reset();
 
     /* Connect to the server */
-    g_cs = new ClientSocket("heaven", 12345);
+    g_cs = new ClientSocket("heaven", 12321);
     if (!g_cs->connected())
     {
         error("Couldn't connect to server.");
