@@ -268,6 +268,12 @@ int main(int argc, char *argv[])
 {
     time_reset();
 
+    /* Create main window */
+    g_window = new Fl_Window(800, 600);
+    g_gv = new GameView(0, 0, 0, 600, 600);
+    g_window->end();
+    g_window->show();
+
     /* Connect to the server */
     g_cs = new ClientSocket(argc > 1 ? argv[1] : "localhost", argc > 2 ? atoi(argv[2]) : 12321);
     if (!g_cs->connected())
@@ -283,10 +289,7 @@ int main(int argc, char *argv[])
     packet[1] = strlen(packet + 2);
     g_cs->write(packet, 2 + packet[1], true);
 
-    g_window = new Fl_Window(800, 600);
-    g_gv = new GameView(0, 0, 0, 600, 600);
-    g_window->end();
-    g_window->show();
+
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.25, callback, NULL);
     int res = Fl::run();
