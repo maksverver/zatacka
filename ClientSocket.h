@@ -1,7 +1,8 @@
 #ifndef CLIENT_SOCKET_H_INCLUDED
 #define CLIENT_SOCKET_H_INCLUDED
 
-#include <cstdlib>
+#include <stdlib.h>
+#include <unistd.h>
 
 struct sockaddr_in;
 

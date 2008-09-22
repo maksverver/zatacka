@@ -107,7 +107,8 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     for (int n = 0; n < g_num_players; ++n)
     {
-        g_gv->setSprite(n, g_gv->w()*g_players[n].x, g_gv->h()*g_players[n].y,
+        g_gv->setSprite(n, (int)round(g_gv->w()*g_players[n].x),
+                           (int)round(g_gv->h()*g_players[n].y),
                            g_players[n].a, g_players[n].col);
     }
 }
@@ -199,14 +200,14 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
                 break;
             }
-            g_gv->plot( round(g_gv->w() * g_players[n].x),
-                        g_gv->h() - 1 - round(g_gv->h() * g_players[n].y),
+            g_gv->plot( (int)round(g_gv->w() * g_players[n].x),
+                        g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
                         g_players[n].col );
             g_players[n].timestamp++;
         }
         g_gv->setSprite( n,
-                         round(g_gv->w() * g_players[n].x),
-                         g_gv->h() - 1 - round(g_gv->h() * g_players[n].y),
+                         (int)round(g_gv->w() * g_players[n].x),
+                         g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
                          g_players[n].a, g_players[n].col );
         assert(g_players[n].timestamp == timestamp);
     }
@@ -268,7 +269,7 @@ int main(int argc, char *argv[])
     time_reset();
 
     /* Connect to the server */
-    g_cs = new ClientSocket("heaven", 12321);
+    g_cs = new ClientSocket(argc > 1 ? argv[1] : "localhost", argc > 2 ? atoi(argv[2]) : 12321);
     if (!g_cs->connected())
     {
         error("Couldn't connect to server.");
@@ -285,7 +286,7 @@ int main(int argc, char *argv[])
     g_window = new Fl_Window(800, 600);
     g_gv = new GameView(0, 0, 0, 600, 600);
     g_window->end();
-    g_window->show(argc, argv);
+    g_window->show();
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.25, callback, NULL);
     int res = Fl::run();

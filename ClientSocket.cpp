@@ -1,12 +1,20 @@
 #include "ClientSocket.h"
 #include "Debug.h"
-#include <netdb.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <sys/types.h>
+#ifndef WIN32
+#include <netdb.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#else
+#include <winsock2.h>
+#include <ws2tcpip.h>
+typedef int socklen_t;
+#define send(s,b,l,f) send(s,(char*)b,l,f)
+#define recv(s,b,l,f) send(s,(char*)b,l,f)
+#endif
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
@@ -37,6 +45,20 @@ static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliab
 ClientSocket::ClientSocket(const char *hostname, int port)
     : fd_stream(-1), fd_packet(-1), stream_pos(0)
 {
+#ifdef WIN32
+    static bool winsock_initialized = false;
+    if (!winsock_initialized)
+    {
+	WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) 
+        {
+            fatal("WSAStartup failed!");
+        }
+	winsock_initialized = true;
+    }
+#endif
+
+
     info("Resolving host \"%s\"...", hostname);
     hostent *he = gethostbyname(hostname);
     if (!he)

@@ -1,6 +1,5 @@
 #include "GameView.h"
 
-
 GameView::GameView(int players, int x, int y, int w, int h)
     : Fl_Widget(x, y, w, h),
       offscr_created(false),
