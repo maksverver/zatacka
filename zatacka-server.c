@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -25,6 +26,8 @@
 const int data_rate      = server_fps;
 const int turn_rate      =   72;
 const int move_rate      =    5;
+
+unsigned char g_field[1000][1000];
 
 struct RGB
 {
@@ -100,6 +103,25 @@ static struct RGB rgb_from_hue(double hue)
     return res;
 }
 
+static void plot(int c)
+{
+    int cx = (int)round(1000*g_clients[c].x);
+    int cy = (int)round(1000*g_clients[c].y);
+
+    for (int dx = -1; dx <= 1; ++dx)
+    {
+        for (int dy = -1; dy <= 1; ++dy)
+        {
+            int x = cx + dx, y = cy + dy;
+            if (x >= 0 && x < 1000 && y >= 0 && y < 1000)
+            {
+                g_field[999 - y][x] = c + 1;
+            }
+        }
+    }
+}
+
+
 static void disconnect(int c, const char *reason);
 
 static void client_send(int c, const void *buf, size_t len, bool reliable)
@@ -129,6 +151,8 @@ static void client_send(int c, const void *buf, size_t len, bool reliable)
     }
 }
 
+static void kill_player(int c);
+
 static void disconnect(int c, const char *reason)
 {
     if (!g_clients[c].in_use) return;
@@ -136,6 +160,9 @@ static void disconnect(int c, const char *reason)
     info( "disconnecting client %d at %s:%d (reason: %s)",
           c, inet_ntoa(g_clients[c].sa_remote.sin_addr),
           ntohs(g_clients[c].sa_remote.sin_port), reason );
+
+    kill_player(c);
+
     g_clients[c].in_use = false;
     if (reason != NULL)
     {
@@ -147,23 +174,15 @@ static void disconnect(int c, const char *reason)
         client_send(c, packet, len + 1, true);
     }
     close(g_clients[c].fd_stream);
-    g_num_clients -= 1;
-    g_num_players -= g_clients[c].player;
-    if (g_clients[c].dead_since != 0)
-    {
-        --g_num_alive;
-    }
-    else
-    {
-        g_clients[c].dead_since = g_timestamp;
-    }
+    --g_num_clients;
+    if (g_clients[c].player) --g_num_players;
     g_clients[c].player = false;
 }
 
 static void kill_player(int c)
 {
-    assert(g_clients[c].dead_since == 0);
-    info("Client %c died.", c);
+    if (g_clients[c].dead_since != -1) return;
+    info("client %d died.", c);
     g_clients[c].dead_since = g_timestamp;
     --g_num_alive;
 }
@@ -246,7 +265,7 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
 
     for (int n = move_backlog - added; n < move_backlog; ++n)
     {
-        if (cl->dead_since != 0)
+        if (cl->dead_since != -1)
         {
             cl->moves[n] = 4;
             continue;
@@ -264,10 +283,14 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
             if (m == 3) cl->a -= 2.0*M_PI/turn_rate;
             cl->x += 1e-3*move_rate*cos(cl->a);
             cl->y += 1e-3*move_rate*sin(cl->a);
-            if ( cl->x < 0 || cl->x >= 1 || cl->y < 0 || cl->y >= 1 )
+            if (cl->x < 0 || cl->x >= 1 || cl->y < 0 || cl->y >= 1)
             {
                 kill_player(c);
             }
+            if (cl->dead_since == -1)
+            {
+                plot(cl - g_clients);
+            } 
         }
     }
     cl->timestamp += added;
@@ -292,12 +315,83 @@ static void handle_packet( int c, unsigned char *buf, size_t len,
     }
 }
 
+
+static void debug_dump_image()
+{
+    char path[64];
+    FILE *fp;
+
+    struct BMP_Header
+    {
+        char   bfType[2];
+        int    bfSize;
+        int    bfReserved;
+        int    bfOffBits;
+
+        int    biSize;
+        int    biWidth;
+        int    biHeight;
+        short  biPlanes;
+        short  biBitCount;
+        int    biCompression;
+        int    biSizeImage;
+        int    biXPelsPerMeter;
+        int    biYPelsPerMeter;
+        int    biClrUsed;
+        int    biClrImportant;
+    } __attribute__((__packed__)) bmp_header = {
+        .bfType = { 'B', 'M' },
+        .bfSize = 54 + 1000*1000 + 256*4,
+        .bfOffBits = 54 + 1024,
+        .biSize = 40,
+        .biWidth = 1000,
+        .biHeight = 1000,
+        .biPlanes = 1,
+        .biBitCount = 8,
+    };
+    struct BMP_RGB {
+        unsigned char b, g, r, a;
+    } bmp_palette[256] = {
+        {    0,   0,   0,   0 },
+        {    0,   0, 255,   0 },
+        {    0, 255,   0,   0 },
+        {  255,   0,   0,   0 },
+        {    0, 255, 255,   0 },
+        {  255,   0, 255,   0 },
+        {  255, 255,   0,   0 },
+        {  255, 255, 255,   0 } };
+
+    assert(sizeof(bmp_header) == 54);
+    assert(sizeof(bmp_palette) == 1024);
+
+    sprintf(path, "field-%d.bmp", (int)time(NULL));
+    fp = fopen(path, "wb");
+    if (fp == NULL) fatal("can't open %s for writing.", path);
+    if (fwrite(&bmp_header, sizeof(bmp_header), 1, fp) != 1)
+    {
+        fatal("couldn't write BMP header");
+    }
+    if (fwrite(&bmp_palette, sizeof(bmp_palette), 1, fp) != 1)
+    {
+        fatal("couldn't write BMP palette data");
+    }
+    if (fwrite(g_field, 1000, 1000, fp) != 1000)
+    {
+        fatal("couldn't write BMP pixel data");
+    }
+    fclose(fp);
+}
+
 static void restart_game()
 {
     g_timestamp = 0;
     time_reset();
 
     if (g_num_clients == 0) return;
+
+    if (g_num_players > 0) debug_dump_image();
+
+    memset(g_field, 0, sizeof(g_field));
 
     int i = 0;
     for (int n = 0; n < max_clients; ++n)
@@ -310,7 +404,7 @@ static void restart_game()
             g_clients[n].player = true;
             g_num_players += 1;
         }
-        g_clients[n].dead_since = 0;
+        g_clients[n].dead_since = -1;
         g_clients[n].color = rgb_from_hue((double)i/g_num_players);
         g_clients[n].x = 0.1 + 0.8*rand()/RAND_MAX;
         g_clients[n].y = 0.1 + 0.8*rand()/RAND_MAX;
@@ -377,29 +471,6 @@ static void restart_game()
     }
 }
 
-static void make_current(int c)
-{
-    /* BROKEN -- shouldn't change cl->timestamp here */
-    Client *cl = &g_clients[c];
-    int backlog = g_timestamp - cl->timestamp;
-    assert(backlog >= 0);
-    if (backlog >= move_backlog)
-    {
-        kill_player(c);
-        disconnect(c, "out of sync");
-    }
-
-    if (backlog > 0)
-    {
-        memmove(cl->moves, cl->moves + backlog, move_backlog - backlog);
-        for (int n = move_backlog - backlog; n < move_backlog; ++n)
-        {
-            cl->moves[n] = 0;
-        }
-        cl->timestamp = g_timestamp;
-    }
-}
-
 static void do_frame()
 {
     if (g_num_clients == 0) return;
@@ -432,7 +503,7 @@ static void do_frame()
     packet[pos++] = (g_timestamp >>  0)&255;
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != 0 &&
+        if (g_players[n]->dead_since != -1 &&
             g_timestamp - g_players[n]->dead_since >= move_backlog)
         {
             packet[pos++] = 0;
@@ -444,7 +515,7 @@ static void do_frame()
     }
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != 0 &&
+        if (g_players[n]->dead_since != -1 &&
             g_timestamp - g_players[n]->dead_since >= move_backlog)
         {
             continue;
