@@ -113,6 +113,17 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
 }
 
+static void player_turn(int n, int dir)
+{
+    g_players[n].a += dir*2.0*M_PI/g_turn_rate;
+}
+
+static void player_advance(int n)
+{
+    g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
+    g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
+}
+
 static void forward_to(int timestamp)
 {
     assert(timestamp > g_last_timestamp);
@@ -184,18 +195,22 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 error("Invalid move (%d) interpreted as 1 %d", (int)m, t);
                 /* falls through */
             case 1: /* ahead */
+		player_advance(n);
                 break;
 
             case 2: /* left */
-                g_players[n].a += 2.0*M_PI/g_turn_rate;
+		player_turn(n, +1);
+		player_advance(n);
                 break;
 
             case 3: /* right */
-                g_players[n].a -= 2.0*M_PI/g_turn_rate;
+		player_turn(n, -1);
+		player_advance(n);
+                break;
+
+            case 4: /* dead */
                 break;
             }
-            g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
-            g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
 
             g_gv->plot( (int)round(g_gv->w() * g_players[n].x),
                         g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),

@@ -103,22 +103,35 @@ static struct RGB rgb_from_hue(double hue)
     return res;
 }
 
-static void plot(int c)
+static int plot(double x, double y, int col)
 {
-    int cx = (int)round(1000*g_clients[c].x);
-    int cy = (int)round(1000*g_clients[c].y);
+    static const bool templ[7][7] = {
+        { 0,0,1,1,1,0,0 },
+        { 0,1,1,1,1,1,0 },
+        { 1,1,1,1,1,1,1 },
+        { 1,1,1,1,1,1,1 },
+        { 1,1,1,1,1,1,1 },
+        { 0,1,1,1,1,1,0 },
+        { 0,0,1,1,1,0,0 } };
 
-    for (int dx = -1; dx <= 1; ++dx)
+    int cx = (int)round(1000*x);
+    int cy = (int)round(1000*y);
+
+    int res = 0;
+    for (int dx = -3; dx <= 3; ++dx)
     {
-        for (int dy = -1; dy <= 1; ++dy)
+        for (int dy = -3; dy <= 3; ++dy)
         {
+            if (!templ[dx + 3][dy + 3]) continue;
             int x = cx + dx, y = cy + dy;
             if (x >= 0 && x < 1000 && y >= 0 && y < 1000)
             {
-                g_field[y][x] = c + 1;
+                if (g_field[y][x] > res) res = g_field[y][x];
+                g_field[y][x] = col;
             }
         }
     }
+    return res;
 }
 
 
@@ -278,19 +291,28 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
             kill_player(c);
         }
         else
+        if (cl->dead_since == -1)
         {
             if (m == 2) cl->a += 2.0*M_PI/turn_rate;
             if (m == 3) cl->a -= 2.0*M_PI/turn_rate;
-            cl->x += 1e-3*move_rate*cos(cl->a);
-            cl->y += 1e-3*move_rate*sin(cl->a);
-            if (cl->x < 0 || cl->x >= 1 || cl->y < 0 || cl->y >= 1)
+            double nx = cl->x + 1e-3*move_rate*cos(cl->a);
+            double ny = cl->y + 1e-3*move_rate*sin(cl->a);
+
+            /* First, blank out previous dot */
+            plot(cl->x, cl->y, 0);
+
+            /* Check for out-of-bounds or overlapping dots */
+            if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
+                 plot(nx, ny, c + 1) != 0 )
             {
                 kill_player(c);
             }
-            if (cl->dead_since == -1)
-            {
-                plot(cl - g_clients);
-            } 
+
+            /* Redraw previous dot */
+            plot(cl->x, cl->y, c + 1);
+
+            cl->x = nx;
+            cl->y = ny;
         }
     }
     cl->timestamp += added;
