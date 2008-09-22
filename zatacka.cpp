@@ -184,22 +184,19 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 error("Invalid move (%d) interpreted as 1 %d", (int)m, t);
                 /* falls through */
             case 1: /* ahead */
-                g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
-                g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
                 break;
 
             case 2: /* left */
                 g_players[n].a += 2.0*M_PI/g_turn_rate;
-                g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
-                g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
                 break;
 
             case 3: /* right */
                 g_players[n].a -= 2.0*M_PI/g_turn_rate;
-                g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
-                g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
                 break;
             }
+            g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
+            g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
+
             g_gv->plot( (int)round(g_gv->w() * g_players[n].x),
                         g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
                         g_players[n].col );
