@@ -129,6 +129,8 @@ static void client_send(int c, const void *buf, size_t len, bool reliable)
     }
 }
 
+static void kill_player(int c);
+
 static void disconnect(int c, const char *reason)
 {
     if (!g_clients[c].in_use) return;
@@ -136,6 +138,9 @@ static void disconnect(int c, const char *reason)
     info( "disconnecting client %d at %s:%d (reason: %s)",
           c, inet_ntoa(g_clients[c].sa_remote.sin_addr),
           ntohs(g_clients[c].sa_remote.sin_port), reason );
+
+    kill_player(c);
+
     g_clients[c].in_use = false;
     if (reason != NULL)
     {
@@ -147,23 +152,15 @@ static void disconnect(int c, const char *reason)
         client_send(c, packet, len + 1, true);
     }
     close(g_clients[c].fd_stream);
-    g_num_clients -= 1;
-    g_num_players -= g_clients[c].player;
-    if (g_clients[c].dead_since != 0)
-    {
-        --g_num_alive;
-    }
-    else
-    {
-        g_clients[c].dead_since = g_timestamp;
-    }
+    --g_num_clients;
+    if (g_clients[c].player) --g_num_players;
     g_clients[c].player = false;
 }
 
 static void kill_player(int c)
 {
-    assert(g_clients[c].dead_since == 0);
-    info("Client %c died.", c);
+    if (g_clients[c].dead_since != -1) return;
+    info("client %d died.", c);
     g_clients[c].dead_since = g_timestamp;
     --g_num_alive;
 }
@@ -246,7 +243,7 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
 
     for (int n = move_backlog - added; n < move_backlog; ++n)
     {
-        if (cl->dead_since != 0)
+        if (cl->dead_since != -1)
         {
             cl->moves[n] = 4;
             continue;
@@ -310,7 +307,7 @@ static void restart_game()
             g_clients[n].player = true;
             g_num_players += 1;
         }
-        g_clients[n].dead_since = 0;
+        g_clients[n].dead_since = -1;
         g_clients[n].color = rgb_from_hue((double)i/g_num_players);
         g_clients[n].x = 0.1 + 0.8*rand()/RAND_MAX;
         g_clients[n].y = 0.1 + 0.8*rand()/RAND_MAX;
@@ -432,7 +429,7 @@ static void do_frame()
     packet[pos++] = (g_timestamp >>  0)&255;
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != 0 &&
+        if (g_players[n]->dead_since != -1 &&
             g_timestamp - g_players[n]->dead_since >= move_backlog)
         {
             packet[pos++] = 0;
@@ -444,7 +441,7 @@ static void do_frame()
     }
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != 0 &&
+        if (g_players[n]->dead_since != -1 &&
             g_timestamp - g_players[n]->dead_since >= move_backlog)
         {
             continue;
