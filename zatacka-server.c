@@ -49,7 +49,8 @@ typedef struct Client
     char            moves[move_backlog];
 
     /* Player info */
-    bool            player, alive;
+    bool            player;
+    int             dead_since;
     char            name[max_name_len + 1];
     struct RGB      color;
     double          x, y, a;    /* 0 <= x,y < 1; 0 < a <= 2pi */
@@ -148,15 +149,23 @@ static void disconnect(int c, const char *reason)
     close(g_clients[c].fd_stream);
     g_num_clients -= 1;
     g_num_players -= g_clients[c].player;
-    g_num_alive   -= g_clients[c].alive;
-    g_clients[c].alive = g_clients[c].player = false;
+    if (g_clients[c].dead_since != 0)
+    {
+        --g_num_alive;
+    }
+    else
+    {
+        g_clients[c].dead_since = g_timestamp;
+    }
+    g_clients[c].player = false;
 }
 
 static void kill_player(int c)
 {
+    assert(g_clients[c].dead_since == 0);
     info("Client %c died.", c);
-    g_num_alive -= g_clients[c].alive;
-    g_clients[c].alive = false;
+    g_clients[c].dead_since = g_timestamp;
+    --g_num_alive;
 }
 
 static void handle_HELO(int c, unsigned char *buf, size_t len)
@@ -225,7 +234,7 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
 
     if (timestamp <= cl->timestamp)
     {
-        warn("(MOVE) discarded out-of-order move packet");
+        warn("(MOVE) discarded out-of-order move packet %d,%d,%d", timestamp, cl->timestamp,0);
         return;
     }
 
@@ -237,9 +246,9 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
 
     for (int n = move_backlog - added; n < move_backlog; ++n)
     {
-        if (!cl->alive)
+        if (cl->dead_since != 0)
         {
-            cl->moves[n] = 0;
+            cl->moves[n] = 4;
             continue;
         }
 
@@ -261,16 +270,19 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
             }
         }
     }
-    g_players[c]->timestamp += added;
-    assert(g_players[c]->timestamp == timestamp);
+    cl->timestamp += added;
+    assert(cl->timestamp == timestamp);
 }
 
 static void handle_packet( int c, unsigned char *buf, size_t len,
                            bool reliable )
 {
+/*
     info( "%s packet type %d of length %d received from client #%d",
           reliable ? "reliable" : "unreliable", (int)buf[0], len, c );
     hex_dump(buf, len);
+*/
+
     switch ((int)buf[0])
     {
     case MRCS_HELO: return handle_HELO(c, buf, len);
@@ -298,7 +310,7 @@ static void restart_game()
             g_clients[n].player = true;
             g_num_players += 1;
         }
-        g_clients[n].alive = true;
+        g_clients[n].dead_since = 0;
         g_clients[n].color = rgb_from_hue((double)i/g_num_players);
         g_clients[n].x = 0.1 + 0.8*rand()/RAND_MAX;
         g_clients[n].y = 0.1 + 0.8*rand()/RAND_MAX;
@@ -367,12 +379,13 @@ static void restart_game()
 
 static void make_current(int c)
 {
+    /* BROKEN -- shouldn't change cl->timestamp here */
     Client *cl = &g_clients[c];
     int backlog = g_timestamp - cl->timestamp;
     assert(backlog >= 0);
     if (backlog >= move_backlog)
     {
-        cl->alive = false;
+        kill_player(c);
         disconnect(c, "out of sync");
     }
 
@@ -393,10 +406,15 @@ static void do_frame()
     if (g_num_alive == 0) restart_game();
     if (g_num_players == 0) return;
 
-    /* Move all commands forward to current time */
+    /* Disconnect out-of-sync clients */
     for (int n = 0; n < g_num_players; ++n)
     {
-        make_current(g_players[n] - g_clients);
+        int backlog = g_timestamp - g_players[n]->timestamp;
+        assert(backlog >= 0);
+        if (backlog >= move_backlog)
+        {
+            disconnect(g_players[n] - g_clients, "out of sync");
+        }
     }
 
     /* Send moves packet to all players */
@@ -414,13 +432,27 @@ static void do_frame()
     packet[pos++] = (g_timestamp >>  0)&255;
     for (int n = 0; n < g_num_players; ++n)
     {
-        make_current(g_players[n] - g_clients);
-        packet[pos++] = g_players[n]->alive ? 1 : 0;
+        if (g_players[n]->dead_since != 0 &&
+            g_timestamp - g_players[n]->dead_since >= move_backlog)
+        {
+            packet[pos++] = 0;
+        }
+        else
+        {
+            packet[pos++] = 1;
+        }
     }
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (!g_players[n]->alive) continue;
-        memcpy(packet + pos, g_players[n]->moves, move_backlog);
+        if (g_players[n]->dead_since != 0 &&
+            g_timestamp - g_players[n]->dead_since >= move_backlog)
+        {
+            continue;
+        }
+        int backlog = g_timestamp - g_players[n]->timestamp;
+        memcpy(packet + pos, g_players[n]->moves + backlog,
+                             move_backlog - backlog);
+	memset(packet + pos + move_backlog - backlog, 0, backlog);
         pos += move_backlog;
     }
     for (int n = 0; n < g_num_players; ++n)

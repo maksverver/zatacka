@@ -9,7 +9,3 @@ Client:
 Server:
  - kill player that intersects a path
 
-Bug:
- - when a player dies, the server stops sending moves, 
-   including past moves which may be required by other clients to
-   draw the playfield correctly.
