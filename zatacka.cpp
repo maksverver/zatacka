@@ -187,10 +187,15 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             unsigned char m = buf[pos++];
             if (t < g_players[n].timestamp) continue;
 
+            if (m == 0)
+            {
+                /* no further move known yet */
+                pos += timestamp - t;
+                break;
+            }
+
             switch (m)
             {
-            case 0: break;
-
             default:
                 error("Invalid move (%d) interpreted as 1 %d", (int)m, t);
                 /* falls through */
@@ -221,7 +226,6 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                          (int)round(g_gv->w() * g_players[n].x),
                          g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
                          g_players[n].a, g_players[n].col );
-        assert(g_players[n].timestamp == timestamp);
     }
 
     forward_to(timestamp + 1);
