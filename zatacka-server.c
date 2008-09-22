@@ -115,7 +115,7 @@ static void plot(int c)
             int x = cx + dx, y = cy + dy;
             if (x >= 0 && x < 1000 && y >= 0 && y < 1000)
             {
-                g_field[999 - y][x] = c + 1;
+                g_field[y][x] = c + 1;
             }
         }
     }
