@@ -2,6 +2,7 @@
 #include "Protocol.h"
 #include <assert.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,11 +12,15 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
-const int max_clients    =   64;
-const int server_fps     =   40;
-const int move_backlog   =   20;
-const int max_packet_len = 4094;
-const int max_name_len   =   20;
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define max_clients       (64)
+#define server_fps        (40)
+#define move_backlog      (20)
+#define max_packet_len  (4096)
+#define max_name_len      (20)
 
 const int data_rate      = server_fps;
 const int turn_rate      =   72;
@@ -26,13 +31,13 @@ struct RGB
     unsigned char r, g, b;
 };
 
-struct Client
+typedef struct Client
 {
     /* Set to true only if this client is currently in use */
     bool            in_use;
 
     /* Remote address (TCP only) */
-    sockaddr_in     sa_remote;
+    struct sockaddr_in sa_remote;
 
     /* Streaming data */
     int             fd_stream;
@@ -46,9 +51,9 @@ struct Client
     /* Player info */
     bool            player, alive;
     char            name[max_name_len + 1];
-    RGB             color;
+    struct RGB      color;
     double          x, y, a;    /* 0 <= x,y < 1; 0 < a <= 2pi */
-};
+} Client;
 
 /* Globals */
 static int g_fd_listen;         /* Stream data listening socket */
@@ -62,9 +67,9 @@ static Client g_clients[max_clients];
 static Client *g_players[max_clients];
 
 /* Hue assumed to be in range [0,1) */
-static RGB rgb_from_hue(double hue)
+static struct RGB rgb_from_hue(double hue)
 {
-    RGB res;
+    struct RGB res;
 
     if (hue < 0 || hue >= 1)
     {
@@ -115,7 +120,7 @@ static void client_send(int c, const void *buf, size_t len, bool reliable)
     else
     {
         if (sendto( g_fd_packet, buf, len, MSG_DONTWAIT,
-                    (sockaddr*)&g_clients[c].sa_remote,
+                    (struct sockaddr*)&g_clients[c].sa_remote,
                     sizeof(g_clients[c].sa_remote) ) != (ssize_t)len)
         {
             warn("unreliable send() failed");
@@ -156,10 +161,10 @@ static void kill_player(int c)
 
 static void handle_HELO(int c, unsigned char *buf, size_t len)
 {
-    Client &cl = g_clients[c];
+    Client *cl = &g_clients[c];
 
     /* Can only send this once! */
-    if (cl.player) return;
+    if (cl->player) return;
 
     /* Verify packet data */
     int L = len > 1 ? buf[1] : 0;
@@ -178,14 +183,14 @@ static void handle_HELO(int c, unsigned char *buf, size_t len)
     }
 
     /* Assign player name */
-    memcpy(cl.name, buf + 2, L);
-    cl.name[L] = '\0';
+    memcpy(cl->name, buf + 2, L);
+    cl->name[L] = '\0';
 
     /* Check availability of name */
     for (int n = 0; n < max_clients; ++n)
     {
         if (n == c || !g_clients[n].in_use) continue;
-        if (strcmp(cl.name, g_clients[n].name) == 0)
+        if (strcmp(cl->name, g_clients[n].name) == 0)
         {
             disconnect(c, "(HELO) name unavailable");
             return;
@@ -195,7 +200,7 @@ static void handle_HELO(int c, unsigned char *buf, size_t len)
 
 static void handle_MOVE(int c, unsigned char *buf, size_t len)
 {
-    Client &cl = *g_players[c];
+    Client *cl = g_players[c];
 
     if (len != 9 + move_backlog)
     {
@@ -218,27 +223,27 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
         return;
     }
 
-    if (timestamp <= cl.timestamp)
+    if (timestamp <= cl->timestamp)
     {
         warn("(MOVE) discarded out-of-order move packet");
         return;
     }
 
-    int added = timestamp - cl.timestamp;
+    int added = timestamp - cl->timestamp;
     assert(added >= 0 && added <= move_backlog);
-    memmove(cl.moves, cl.moves + added, move_backlog - added);
-    memcpy( cl.moves + move_backlog - added,
+    memmove(cl->moves, cl->moves + added, move_backlog - added);
+    memcpy( cl->moves + move_backlog - added,
             buf + 9 + move_backlog - added, added );
 
     for (int n = move_backlog - added; n < move_backlog; ++n)
     {
-        if (!cl.alive)
+        if (!cl->alive)
         {
-            cl.moves[n] = 0;
+            cl->moves[n] = 0;
             continue;
         }
 
-        int m = cl.moves[n];
+        int m = cl->moves[n];
         if (m < 1 || m > 3)
         {
             error("Invalid move %d received from client %d\n", m, c);
@@ -246,11 +251,11 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
         }
         else
         {
-            if (m == 2) cl.a += 2.0*M_PI/turn_rate;
-            if (m == 3) cl.a -= 2.0*M_PI/turn_rate;
-            cl.x += 1e-3*move_rate*cos(cl.a);
-            cl.y += 1e-3*move_rate*sin(cl.a);
-            if ( cl.x < 0 || cl.x >= 1 || cl.y < 0 || cl.y >= 1 )
+            if (m == 2) cl->a += 2.0*M_PI/turn_rate;
+            if (m == 3) cl->a -= 2.0*M_PI/turn_rate;
+            cl->x += 1e-3*move_rate*cos(cl->a);
+            cl->y += 1e-3*move_rate*sin(cl->a);
+            if ( cl->x < 0 || cl->x >= 1 || cl->y < 0 || cl->y >= 1 )
             {
                 kill_player(c);
             }
@@ -332,53 +337,53 @@ static void restart_game()
     /* FIXME: possible buffer overflow here, depending on server parameters */
     for (int i = 0; i < g_num_players; ++i)
     {
-        Client &cl = *g_players[i];
-        packet[pos++] = cl.color.r;
-        packet[pos++] = cl.color.g;
-        packet[pos++] = cl.color.b;
-        int x = (int)(cl.x*65536);
-        int y = (int)(cl.y*65536);
-        int a = (int)(cl.a/(2.0*M_PI)*65536);
+        Client *cl = g_players[i];
+        packet[pos++] = cl->color.r;
+        packet[pos++] = cl->color.g;
+        packet[pos++] = cl->color.b;
+        int x = (int)(cl->x*65536);
+        int y = (int)(cl->y*65536);
+        int a = (int)(cl->a/(2.0*M_PI)*65536);
         packet[pos++] = (x>>8)&255;
         packet[pos++] = (x>>0)&255;
         packet[pos++] = (y>>8)&255;
         packet[pos++] = (y>>0)&255;
         packet[pos++] = (a>>8)&255;
         packet[pos++] = (a>>0)&255;
-        size_t name_len = strlen(cl.name);
+        size_t name_len = strlen(cl->name);
         packet[pos++] = name_len;
-        memcpy(&packet[pos], cl.name, name_len);
+        memcpy(&packet[pos], cl->name, name_len);
         pos += name_len;
     }
 
     /* Send start packet to all players */
     for (int i = 0; i < g_num_players; ++i)
     {
-        Client &cl = *g_players[i];
+        Client *cl = g_players[i];
         packet[6] = i;
-        client_send(&cl - g_clients, packet, pos, true);
+        client_send(cl - g_clients, packet, pos, true);
     }
 }
 
 static void make_current(int c)
 {
-    Client &cl = g_clients[c];
-    int backlog = g_timestamp - cl.timestamp;
+    Client *cl = &g_clients[c];
+    int backlog = g_timestamp - cl->timestamp;
     assert(backlog >= 0);
     if (backlog >= move_backlog)
     {
-        cl.alive = false;
+        cl->alive = false;
         disconnect(c, "out of sync");
     }
 
     if (backlog > 0)
     {
-        memmove(cl.moves, cl.moves + backlog, move_backlog - backlog);
+        memmove(cl->moves, cl->moves + backlog, move_backlog - backlog);
         for (int n = move_backlog - backlog; n < move_backlog; ++n)
         {
-            cl.moves[n] = 0;
+            cl->moves[n] = 0;
         }
-        cl.timestamp = g_timestamp;
+        cl->timestamp = g_timestamp;
     }
 }
 
@@ -474,9 +479,9 @@ static int run()
         /* Accept new connections */
         if (FD_ISSET(g_fd_listen, &readfds))
         {
-            sockaddr_in sa;
+            struct sockaddr_in sa;
             socklen_t sa_len = sizeof(sa);
-            int fd = accept(g_fd_listen, (sockaddr*)&sa, &sa_len);
+            int fd = accept(g_fd_listen, (struct sockaddr*)&sa, &sa_len);
             if (fd < 0)
             {
                 error("accept() failed");
@@ -514,13 +519,13 @@ static int run()
         /* Accept incoming packets */
         if (FD_ISSET(g_fd_packet, &readfds))
         {
-            sockaddr_in sa;
+            struct sockaddr_in sa;
             socklen_t sa_len = sizeof(sa);
             unsigned char buf[max_packet_len];
             ssize_t buf_len;
 
             buf_len = recvfrom( g_fd_packet, buf, sizeof(buf), 0,
-                                (sockaddr*)&sa, &sa_len );
+                                (struct sockaddr*)&sa, &sa_len );
             if (buf_len < 0)
             {
                 error("recvfrom() failed");
@@ -612,7 +617,7 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
 
-    sockaddr_in sa_local;
+    struct sockaddr_in sa_local;
     sa_local.sin_family = AF_INET;
     sa_local.sin_port   = htons(12321);
     sa_local.sin_addr.s_addr = INADDR_ANY;
@@ -623,7 +628,7 @@ int main(int argc, char *argv[])
     {
         fatal("Could not create TCP socket: socket() failed");
     }
-    if (bind(g_fd_listen, (sockaddr*)&sa_local, sizeof(sa_local)) != 0)
+    if (bind(g_fd_listen, (struct sockaddr*)&sa_local, sizeof(sa_local)) != 0)
     {
         fatal("Could not create TCP socket: bind() failed");
     }
@@ -638,7 +643,7 @@ int main(int argc, char *argv[])
     {
         fatal("Could not create UDP socket: socket() failed");
     }
-    if (bind(g_fd_packet, (sockaddr*)&sa_local, sizeof(sa_local)) != 0)
+    if (bind(g_fd_packet, (struct sockaddr*)&sa_local, sizeof(sa_local)) != 0)
     {
         fatal("Could not create UDP socket: bind() failed");
     }
