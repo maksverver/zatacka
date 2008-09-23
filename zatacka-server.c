@@ -1,3 +1,4 @@
+#define _POSIX_SOURCE
 #include "Debug.h"
 #include "Protocol.h"
 #include <assert.h>
@@ -8,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
