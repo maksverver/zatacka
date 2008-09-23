@@ -1,10 +1,14 @@
 General:
- - create start-up GUI to configure server and keys (1)
  - allow multiple players per client (2)
+ - send score board update after a player dies
 
 Client:
+ - create start-up GUI to configure server and keys (1)
  - make resolution configurable (3)
  - support full-screen (3)
 
 Server:
- - debug!
+ Potential bug:
+  - When a client is disconnected, it may have players active, which are pointed
+    to by the g_players structure. If a new client connects, this structure is
+    reset, which may cause weird behaviour in the server.
