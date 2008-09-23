@@ -13,7 +13,7 @@
 #include <ws2tcpip.h>
 typedef int socklen_t;
 #define send(s,b,l,f) send(s,(char*)b,l,f)
-#define recv(s,b,l,f) send(s,(char*)b,l,f)
+#define recv(s,b,l,f) recv(s,(char*)b,l,f)
 #endif
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
