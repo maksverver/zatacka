@@ -9,8 +9,10 @@ Packet format:
 Reliable packets: (client->server)
    0 Hello
         1 byte: protocol version (1)
-        1 byte: name length (L; 1 <= L <= 20)
-        L bytes: name
+        1 byte: number of players (P; 1 <= P <= 4)
+        For each player:
+            1 byte: name length (L; 1 <= L <= 20)
+            L bytes: name
    1 Quit
         no data
 
@@ -29,7 +31,6 @@ Reliable packets: (server->client)
         1 byte: move rate (in 1000th parts of the field per turn)
         1 byte: backlog (number of moves to send in each packet)
         1 byte: number of players (P)
-        1 byte: YOUR player id (id; 0 < id < P)
 
         4 byte: game id
 
@@ -52,10 +53,11 @@ Unreliable packets: (client->server)
  128 Moves
         4 bytes: game id
         4 bytes: timestamp
-        X bytes: moves (where X == backlog parameter)
-            1: move straight ahead
-            2: turn left
-            3: turn right
+        For each player (controlled by this client):
+            X bytes: moves (where X == backlog parameter)
+                1: move straight ahead
+                2: turn left
+                3: turn right
 
 Unreliable packets: (server->client)
  192 Moves

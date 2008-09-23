@@ -1,6 +1,9 @@
 General:
- - allow multiple players per client (2)
+ - disallow moves forward for the first N frames, then hide sprites
+ - kill last player after timeout period (5 sec?)
  - send score board update after a player dies
+ - keep player colors between rounds
+ - holes in snakes
 
 Client:
  - create start-up GUI to configure server and keys (1)
@@ -10,6 +13,8 @@ Client:
    and the main functions only update this model (and notifiy the views)
 
 Server:
+ - Mask SIGPIPE!
+
  Potential bug:
   - When a client is disconnected, it may have players active, which are pointed
     to by the g_players array. If a new client connects, the active player

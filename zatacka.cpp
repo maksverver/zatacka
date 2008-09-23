@@ -38,10 +38,21 @@ int g_data_rate;        /* moves per second (currently also display FPS) */
 int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
 int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
 int g_move_backlog;     /* number of moves to cache and send/receive */
-int g_player_index;     /* index of my player */
 int g_num_players;      /* number of players in the game == g_players.size() */
-std::vector<Player> g_players;
-std::string g_moves;    /* my recent moves (g_moves.size() == g_move_backlog) */
+
+std::vector<std::string> g_my_names;   /* my player names */
+std::vector<std::string> g_my_moves;   /* my recent moves (each g_move_backlog long) */
+
+std::vector<Player> g_players;  /* all players in the game */
+
+
+static void plot_player(int n)
+{
+    g_gv->plot(
+        (int)round(g_gv->w() * g_players[n].x),
+        g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
+        g_players[n].col );
+}
 
 static void handle_MESG(unsigned char *buf, size_t len)
 {
@@ -61,30 +72,30 @@ static void handle_DISC(unsigned char *buf, size_t len)
 
 static void handle_STRT(unsigned char *buf, size_t len)
 {
-    if (len < 11)
+    if (len < 10)
     {
         fatal("(STRT) packet too short");
         return;
     }
 
     g_last_timestamp = -1;
-    g_data_rate     = buf[1];
-    g_turn_rate     = buf[2];
-    g_move_rate     = buf[3];
-    g_move_backlog  = buf[4];
-    g_num_players   = buf[5];
-    g_player_index  = buf[6];
-    if (g_player_index >= g_num_players)
-    {
-        fatal("(STRT) invalid player index");
-    }
-    g_gameid = (buf[7] << 24) | (buf[8] << 16) | (buf[9] << 8) | (buf[10] << 0);
+    size_t pos = 1;
+    g_data_rate     = buf[pos++];
+    g_turn_rate     = buf[pos++];
+    g_move_rate     = buf[pos++];
+    g_move_backlog  = buf[pos++];
+    g_num_players   = buf[pos++];
+    g_gameid = (buf[pos] << 24) | (buf[pos + 1] << 16) | (buf[pos + 2] << 8) | (buf[pos + 3] << 0);
+    pos += 4;
 
-    int pos = 11;
-    info( "Restarting game with %d players (my index: %d)",
-          g_num_players, g_player_index );
+    assert(pos == 10);
+
+    info("Restarting game with %d players", g_num_players);
     g_players = std::vector<Player>(g_num_players);
-    g_moves   = std::string((size_t)g_move_backlog, 0);
+
+    g_my_moves = std::vector<std::string> (
+        g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
+
     /* FIXME: read outside of buffer here, if the packet is not correctly formatted! */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -103,6 +114,8 @@ static void handle_STRT(unsigned char *buf, size_t len)
               n, g_players[n].name.c_str(),
               g_players[n].x, g_players[n].y, g_players[n].a );
         g_players[n].timestamp = 0;
+
+        plot_player(n);
     }
     assert((size_t)pos == len);
 
@@ -147,16 +160,23 @@ static void player_advance(int n)
 
 static void forward_to(int timestamp)
 {
+    static const int keys[4][2] = {
+        { FL_Left, FL_Right }, { 'A', 'D'}, { 'M', '.'}, { '4', '6'} };
+
     assert(timestamp > g_last_timestamp);
-    assert(g_moves.size() == (size_t)g_move_backlog);
-
     int delay = timestamp - g_last_timestamp;
-    std::rotate(g_moves.begin(), g_moves.begin() + delay, g_moves.end());
-
-    unsigned char m = 1;
-    if (Fl::event_key(FL_Left) && !Fl::event_key(FL_Right)) m = 2;
-    if (Fl::event_key(FL_Right) && !Fl::event_key(FL_Left)) m = 3;
-    for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos) g_moves[pos] = m;
+    for (size_t n = 0; n < g_my_moves.size(); ++n)
+    {
+        std::string &moves = g_my_moves[n];
+        std::rotate(moves.begin(), moves.begin() + delay, moves.end());
+        unsigned char m = 1;
+        if (Fl::event_key(keys[n][0]) && !Fl::event_key(keys[n][1])) m = 2;
+        if (Fl::event_key(keys[n][1]) && !Fl::event_key(keys[n][0])) m = 3;
+        for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos)
+        {
+            moves[pos] = m;
+        }
+    }
     g_last_timestamp = timestamp;
 }
 
@@ -235,9 +255,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 break;
             }
 
-            g_gv->plot( (int)round(g_gv->w() * g_players[n].x),
-                        g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
-                        g_players[n].col );
+            plot_player(n);
             g_players[n].timestamp++;
         }
         g_gv->setSprite( n,
@@ -250,24 +268,31 @@ static void handle_MOVE(unsigned char *buf, size_t len)
 
     {
         char packet[4096];
-        packet[0] = MUCS_MOVE;
-        packet[1] = (g_gameid >> 24)&255;
-        packet[2] = (g_gameid >> 16)&255;
-        packet[3] = (g_gameid >>  8)&255;
-        packet[4] = (g_gameid >>  0)&255;
-        packet[5] = (g_last_timestamp >> 24)&255;
-        packet[6] = (g_last_timestamp >> 16)&255;
-        packet[7] = (g_last_timestamp >>  8)&255;
-        packet[8] = (g_last_timestamp >>  0)&255;
-        memcpy(packet + 9, g_moves.data(), g_move_backlog);
-        g_cs->write(packet, 9 + g_move_backlog, false);
+        size_t pos = 0;
+        packet[pos++] = MUCS_MOVE;
+        packet[pos++] = (g_gameid >> 24)&255;
+        packet[pos++] = (g_gameid >> 16)&255;
+        packet[pos++] = (g_gameid >>  8)&255;
+        packet[pos++] = (g_gameid >>  0)&255;
+        packet[pos++] = (g_last_timestamp >> 24)&255;
+        packet[pos++] = (g_last_timestamp >> 16)&255;
+        packet[pos++] = (g_last_timestamp >>  8)&255;
+        packet[pos++] = (g_last_timestamp >>  0)&255;
+        for (size_t n = 0; n < g_my_moves.size(); ++n)
+        {
+            memcpy(packet + pos, g_my_moves[n].data(), g_move_backlog);
+            pos += g_move_backlog;
+        }
+        g_cs->write(packet, pos, false);
     }
 }
 
 static void handle_packet(unsigned char *buf, size_t len)
 {
+    /*
     info("packet type %d of length %d received", (int)buf[0], len);
     hex_dump(buf, len);
+    */
     switch ((int)buf[0])
     {
     case MRSC_MESG: return handle_MESG(buf, len);
@@ -301,9 +326,11 @@ static void disconnect()
 int main(int argc, char *argv[])
 {
     time_reset();
+    srand(time(NULL));
 
     /* Create main window */
     g_window = new Fl_Window(800, 600);
+    g_window->label("Zatagain!");
     g_window->color(FL_WHITE);
     g_gv = new GameView(0, 0, 0, 600, 600);
     g_sv = new ScoreView(600, 0, 200, 600);
@@ -318,20 +345,39 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* Send hello message */
-    char packet[64];
-    if (argc > 3)
+    /* Set-up names */
+    g_my_names.push_back("Maks");
+    while (g_my_names.size() < 4 && 3 + (int)g_my_names.size() < argc)
     {
-        strncpy(packet + 2, argv[3], 21);
+        g_my_names.push_back(argv[3 + g_my_names.size()]);
+        if (g_my_names.back().size() > 20)
+        {
+            g_my_names.back().erase(
+                g_my_names.back().begin() + 20, g_my_names.back().end() );
+        }
     }
-    else
+    if (g_my_names.empty())
     {
-        sprintf(packet + 2, "player-%d", (int)rand());
+        char name[16];
+        sprintf(name, "player-%04x", rand()&0xffff);
+        g_my_names.push_back(name);
     }
-    packet[0] = 0;
-    packet[1] = strlen(packet + 2);
-    g_cs->write(packet, 2 + packet[1], true);
 
+    /* Send hello message */
+    {
+        char packet[4096];
+        size_t pos = 0;
+
+        packet[pos++] = MRCS_HELO;
+        packet[pos++] = g_my_names.size();
+        for (size_t n = 0; n < g_my_names.size(); ++n)
+        {
+            packet[pos++] = g_my_names[n].size();
+            memcpy(packet + pos, g_my_names[n].data(), g_my_names[n].size());
+            pos += g_my_names[n].size();
+        }
+        g_cs->write(packet, pos, true);
+    }
 
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.25, callback, NULL);

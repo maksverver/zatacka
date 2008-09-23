@@ -103,6 +103,9 @@ static int plot(double x, double y, int col);
 /* Disconnect a client (sending the given reason, if possible) */
 static void client_disconnect(Client *cl, const char *reason);
 
+/* Send a message to all connected clients */
+static void client_broadcast(const void *buf, size_t len, bool reliable);
+
 /* Send a message to a client */
 static void client_send(Client *cl, const void *buf, size_t len, bool reliable);
 
@@ -198,6 +201,16 @@ static int plot(double x, double y, int col)
         }
     }
     return res;
+}
+
+static void client_broadcast(const void *buf, size_t len, bool reliable)
+{
+    for (int n = 0; n < MAX_CLIENTS; ++n)
+    {
+        Client *cl = &g_clients[n];
+        if (!cl->in_use) continue;
+        client_send(cl, buf, len, reliable);
+    }
 }
 
 static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
@@ -298,30 +311,47 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
     /* Check if players have already been registered */
     if (cl->players[0].in_use) return;
 
-    for (int p = 0; p < 1; ++p)
+    size_t pos = 1;
+    if (pos >= len)
+    {
+        client_disconnect(cl, "(HELO) truncated packet");
+        return;
+    }
+    int P = buf[pos++];
+    if (P < 1 || P > PLAYERS_PER_CLIENT)
+    {
+        client_disconnect(cl, "(HELO) invalid number of players");
+        return;
+    }
+    info("HELO P=%d\n", P);
+    for (int p = 0; p < P; ++p)
     {
         Player *pl = &cl->players[p];
 
-        /* Verify packet data */
-        int L = len > 1 ? buf[1] : 0;
-        if (L < 1 || L > MAX_NAME_LEN || L + 2 > (int)len)
+        /* Parse name length */
+        if (pos >= len)
+        {
+            client_disconnect(cl, "(HELO) truncated player");
+            return;
+        }
+        size_t L = buf[pos++];
+        if (L < 1 || L > MAX_NAME_LEN || L > len - pos)
         {
             client_disconnect(cl, "(HELO) invalid name length");
             return;
         }
-        for (int n = 0; n < L; ++n)
+
+        /* Assign player name */
+        for (size_t n = 0; n < L; ++n)
         {
-            if (buf[2 + n] < 32 || buf[2 + n] > 126)
+            pl->name[n] = buf[pos++];
+            if (pl->name[n] < 32 || pl->name[n] > 126)
             {
                 client_disconnect(cl, "(HELO) invalid name character");
                 return;
             }
         }
-
-        /* Assign player name */
-        memcpy(pl->name, buf + 2, L);
         pl->name[L] = '\0';
-        pl->in_use = true;
 
         /* Check availability of name */
         for (int n = 0; n < MAX_CLIENTS; ++n)
@@ -340,18 +370,26 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
                 }
             }
         }
+
+        /* Enable player */
+        pl->in_use = true;
     }
 }
 
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 {
-    if (len != 9 + MOVE_BACKLOG)
+    size_t P = 0;
+
+    while (P < PLAYERS_PER_CLIENT && cl->players[P].in_use) ++P;
+
+    if (len != 9 + P*MOVE_BACKLOG)
     {
         error( "(MOVE) invalid length packet received from client %d "
                "(received %d; expected %d)", cl - g_clients,
-               len, 9 + MOVE_BACKLOG );
+               len, 9 + P*MOVE_BACKLOG );
         return;
     }
+
     unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
     if (gameid != g_gameid)
     {
@@ -367,65 +405,68 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
         return;
     }
 
-    Player *pl = &cl->players[0];
-
-    if (timestamp <= pl->timestamp)
+    for (size_t p = 0; p < P; ++p)
     {
-        warn("(MOVE) discarded out-of-order move packet");
-        return;
-    }
+        Player *pl = &cl->players[p];
 
-    int added = timestamp - pl->timestamp;
-    if (added > MOVE_BACKLOG)
-    {
-        warn("(MOVE) discarded packet from long dead player");
-        return;
-    }
-
-    memmove(pl->moves, pl->moves + added, MOVE_BACKLOG - added);
-    memcpy( pl->moves + MOVE_BACKLOG - added,
-            buf + 9 + MOVE_BACKLOG - added, added );
-
-    for (int n = MOVE_BACKLOG - added; n < MOVE_BACKLOG; ++n)
-    {
-        if (pl->dead_since != -1)
+        if (timestamp <= pl->timestamp)
         {
-            pl->moves[n] = 4;
-            continue;
+            warn("(MOVE) discarded out-of-order move packet");
+            return;
         }
 
-        int m = pl->moves[n];
-        if (m < 1 || m > 3)
+        int added = timestamp - pl->timestamp;
+        if (added > MOVE_BACKLOG)
         {
-            error("received invalid move %d\n", m);
-            player_kill(pl);
+            warn("(MOVE) discarded packet from long dead player");
+            return;
         }
-        else
-        if (pl->dead_since == -1)
+
+        memmove(pl->moves, pl->moves + added, MOVE_BACKLOG - added);
+        memcpy( pl->moves + MOVE_BACKLOG - added,
+                buf + 9 + (p + 1)*MOVE_BACKLOG - added, added );
+
+        for (int n = MOVE_BACKLOG - added; n < MOVE_BACKLOG; ++n)
         {
-            if (m == 2) pl->a += 2.0*M_PI/TURN_RATE;
-            if (m == 3) pl->a -= 2.0*M_PI/TURN_RATE;
-            double nx = pl->x + 1e-3*MOVE_RATE*cos(pl->a);
-            double ny = pl->y + 1e-3*MOVE_RATE*sin(pl->a);
-
-            /* First, blank out previous dot */
-            plot(pl->x, pl->y, 0);
-
-            /* Check for out-of-bounds or overlapping dots */
-            if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
-                 plot(nx, ny, pl->index + 1) != 0 )
+            if (pl->dead_since != -1)
             {
+                pl->moves[n] = 4;
+                continue;
+            }
+
+            int m = pl->moves[n];
+            if (m < 1 || m > 3)
+            {
+                error("received invalid move %d\n", m);
                 player_kill(pl);
             }
-            /* Redraw previous dot */
-            plot(pl->x, pl->y, pl->index + 1);
+            else
+            if (pl->dead_since == -1)
+            {
+                if (m == 2) pl->a += 2.0*M_PI/TURN_RATE;
+                if (m == 3) pl->a -= 2.0*M_PI/TURN_RATE;
+                double nx = pl->x + 1e-3*MOVE_RATE*cos(pl->a);
+                double ny = pl->y + 1e-3*MOVE_RATE*sin(pl->a);
 
-            pl->x = nx;
-            pl->y = ny;
+                /* First, blank out previous dot */
+                plot(pl->x, pl->y, 0);
+
+                /* Check for out-of-bounds or overlapping dots */
+                if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
+                     plot(nx, ny, pl->index + 1) != 0 )
+                {
+                    player_kill(pl);
+                }
+                /* Redraw previous dot */
+                plot(pl->x, pl->y, pl->index + 1);
+
+                pl->x = nx;
+                pl->y = ny;
+            }
         }
+        pl->timestamp += added;
+        assert(pl->timestamp == timestamp);
     }
-    pl->timestamp += added;
-    assert(pl->timestamp == timestamp);
 }
 
 static void debug_dump_image()
@@ -556,7 +597,6 @@ static void restart_game()
     packet[pos++] = MOVE_RATE;
     packet[pos++] = MOVE_BACKLOG;
     packet[pos++] = g_num_players;
-    packet[pos++] = 0;
     packet[pos++] = (g_gameid>>24)&255;
     packet[pos++] = (g_gameid>>16)&255;
     packet[pos++] = (g_gameid>> 8)&255;
@@ -584,14 +624,7 @@ static void restart_game()
     }
 
     /* Send start packet to all clients */
-    for (int n = 0; n < MAX_CLIENTS; ++n)
-    {
-        Client *cl = &g_clients[n];
-        if (!cl->in_use) continue;
-        /* FIXME: this doesn't work if player[0] is not in_use yet */
-        packet[6] = cl->players[0].index;
-        client_send(cl, packet, pos, true);
-    }
+    client_broadcast(packet, pos, true);
 }
 
 static void do_frame()
@@ -654,12 +687,7 @@ static void do_frame()
         pos += MOVE_BACKLOG;
     }
 
-    for (int n = 0; n < MAX_CLIENTS; ++n)
-    {
-        Client *cl = &g_clients[n];
-        if (!cl->in_use) continue;
-        client_send(cl, packet, pos, false);
-    }
+    client_broadcast(packet, pos, false);
 }
 
 static int run()
