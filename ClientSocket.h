@@ -2,7 +2,12 @@
 #define CLIENT_SOCKET_H_INCLUDED
 
 #include <stdlib.h>
+
+#ifdef _MSC_VER
+typedef size_t ssize_t;
+#else
 #include <unistd.h>
+#endif
 
 struct sockaddr_in;
 
