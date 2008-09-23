@@ -1,5 +1,4 @@
 General:
- - kill last player after timeout period (5 sec?)
  - send score board update after a player dies
  - keep player colors between rounds
  - holes in snakes

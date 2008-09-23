@@ -29,6 +29,7 @@
 #define PLAYERS_PER_CLIENT     (4)
 #define TURN_RATE             (72)
 #define MOVE_RATE              (5)
+#define VICTORY_TIME           (3)
 
 #define WARMUP              (SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
@@ -651,7 +652,29 @@ static void restart_game()
 static void do_frame()
 {
     if (g_num_clients == 0) return;
+
     if (g_num_alive == 0) restart_game();
+
+    if (g_num_alive == 1)
+    {
+        /* Find out when last opponent died */
+        int g_last_kill = -1;
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            if (g_players[n]->dead_since > g_last_kill)
+            {
+                g_last_kill = g_players[n]->dead_since;
+            }
+        }
+
+        if ( g_last_kill != -1 &&
+             g_timestamp - g_last_kill > SERVER_FPS*VICTORY_TIME )
+        {
+            /* People are waiting; restart already! */
+            restart_game();
+        }
+    }
+
     if (g_num_players == 0) return;
 
     /* Kill out-of-sync players */

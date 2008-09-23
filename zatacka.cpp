@@ -372,7 +372,6 @@ int main(int argc, char *argv[])
     }
 
     /* Set-up names */
-    g_my_names.push_back("Maks");
     while (g_my_names.size() < 4 && 3 + (int)g_my_names.size() < argc)
     {
         g_my_names.push_back(argv[3 + g_my_names.size()]);
