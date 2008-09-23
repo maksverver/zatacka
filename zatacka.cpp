@@ -9,6 +9,13 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "comctl32.lib")
+inline double round(double a) { return floor(a+0.5); }
+inline int getpid() { return 666; }
+#endif
+
 #define HZ 60
 
 struct Player
