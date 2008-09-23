@@ -373,7 +373,12 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     }
 
     int added = timestamp - pl->timestamp;
-    assert(added >= 0 && added <= MOVE_BACKLOG);
+    if (added > MOVE_BACKLOG)
+    {
+        warn("(MOVE) discarded packet from long dead player");
+        return;
+    }
+
     memmove(pl->moves, pl->moves + added, MOVE_BACKLOG - added);
     memcpy( pl->moves + MOVE_BACKLOG - added,
             buf + 9 + MOVE_BACKLOG - added, added );
@@ -639,6 +644,7 @@ static void do_frame()
             continue;
         }
         int backlog = g_timestamp - g_players[n]->timestamp;
+        if (backlog > MOVE_BACKLOG) backlog = MOVE_BACKLOG;
         memcpy(packet + pos, g_players[n]->moves + backlog,
                              MOVE_BACKLOG - backlog);
         memset(packet + pos + MOVE_BACKLOG - backlog, 0, backlog);
