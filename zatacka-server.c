@@ -233,6 +233,11 @@ static void client_disconnect(Client *cl, const char *reason)
           cl - g_clients, inet_ntoa(cl->sa_remote.sin_addr),
           ntohs(cl->sa_remote.sin_port), reason );
 
+    /* Remove client -- it's important to do this first, because functions
+       call below may call disconnect again (i.e. if client_send() fails) */
+    cl->in_use = false;
+    --g_num_clients;
+
     /* Kill and deactivate all associated players */
     for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
     {
@@ -252,10 +257,6 @@ static void client_disconnect(Client *cl, const char *reason)
         client_send(cl, packet, len + 1, true);
     }
     close(cl->fd_stream);
-
-    /* Remove client */
-    cl->in_use = false;
-    --g_num_clients;
 }
 
 static void player_kill(Player *pl)

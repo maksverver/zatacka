@@ -2,7 +2,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef _MSC_VER
+#include <time.h>
+#else
 #include <sys/time.h>
+#endif
 
 #define INFO  0
 #define WARN  1
@@ -58,6 +63,22 @@ void fatal(const char *fmt, ...)
     abort();
 }
 
+#ifdef _MSC_VER
+
+static clock_t c_start = 0;
+/* Resets the time counter */
+void time_reset()
+{
+	c_start = clock();
+}
+
+double time_now()
+{
+	return (double)(clock() - c_start)/(double)CLOCKS_PER_SEC;
+}
+
+#else
+
 static struct timeval tv_start = { 0, 0 };
 
 /* Resets the time counter */
@@ -74,6 +95,8 @@ double time_now()
     (void)gettimeofday(&tv, NULL);
     return (tv.tv_sec - tv_start.tv_sec) + 1e-6*(tv.tv_usec - tv_start.tv_usec);
 }
+
+#endif
 
 void hex_dump(unsigned char *buf, size_t len)
 {

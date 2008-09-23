@@ -14,6 +14,10 @@ public:
     void update( std::vector<std::string> names,
                  std::vector<int> scores,
                  std::vector<Fl_Color> colors );
+
+private:
+    std::vector<std::string> nameLabels;
+    std::vector<std::string> scoreLabels;
 };
 
 #endif /* ndef SCORE_VIEW_H_INCLUDED */

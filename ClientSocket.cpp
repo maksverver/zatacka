@@ -3,7 +3,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
+
+#ifdef _MSC_VER
+typedef int ssize_t;
+#else
 #include <unistd.h>
+#endif
+
 #ifndef WIN32
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -15,6 +21,7 @@
 typedef int socklen_t;
 #define send(s,b,l,f) send(s,(char*)b,l,f)
 #define recv(s,b,l,f) recv(s,(char*)b,l,f)
+#define close(s) closesocket(s)
 #endif
 
 /* For debugging: simulated probability of packet loss (between 0 and 1)

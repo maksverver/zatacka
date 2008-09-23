@@ -10,6 +10,12 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "comctl32.lib")
+inline double round(double a) { return floor(a+0.5); }
+#endif
+
 #define HZ 60
 
 struct Player
@@ -320,7 +326,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        sprintf(packet + 2, "player-%d", (int)getpid());
+        sprintf(packet + 2, "player-%d", (int)rand());
     }
     packet[0] = 0;
     packet[1] = strlen(packet + 2);
