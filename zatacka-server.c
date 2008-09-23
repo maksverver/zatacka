@@ -850,6 +850,13 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
 
+    /* Mask SIGPIPE, so failed writes do not kill the server */
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGPIPE, &sa, NULL);
+
     /* for debugging: enable core dumps */
     struct rlimit rlim = { RLIM_INFINITY, RLIM_INFINITY };
     if (setrlimit(RLIMIT_CORE, &rlim) != 0)
