@@ -322,6 +322,8 @@ static void handle_MOVE(int c, unsigned char *buf, size_t len)
 static void handle_packet( int c, unsigned char *buf, size_t len,
                            bool reliable )
 {
+    (void)reliable; /* unused */
+
 /*
     info( "%s packet type %d of length %d received from client #%d",
           reliable ? "reliable" : "unreliable", (int)buf[0], len, c );
@@ -386,7 +388,7 @@ static void debug_dump_image()
     assert(sizeof(bmp_header) == 54);
     assert(sizeof(bmp_palette) == 1024);
 
-    sprintf(path, "field-%d.bmp", (int)time(NULL));
+    sprintf(path, "field-%08x.bmp", g_gameid);
     fp = fopen(path, "wb");
     if (fp == NULL) fatal("can't open %s for writing.", path);
     if (fwrite(&bmp_header, sizeof(bmp_header), 1, fp) != 1)

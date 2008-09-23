@@ -1,8 +1,9 @@
 #include "ClientSocket.h"
 #include "Debug.h"
 #include <string.h>
-#include <unistd.h>
+#include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
 #ifndef WIN32
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -15,6 +16,10 @@ typedef int socklen_t;
 #define send(s,b,l,f) send(s,(char*)b,l,f)
 #define recv(s,b,l,f) recv(s,(char*)b,l,f)
 #endif
+
+/* For debugging: simulated probability of packet loss (between 0 and 1)
+                  (applies only to unreliable packet data) */
+static double g_packetloss = 0;
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
@@ -149,7 +154,9 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
         }
     }
     else
+    if (g_packetloss == 0 || rand() > RAND_MAX*g_packetloss)
     {
+
         if (send(fd_packet, buf, len, 0) != (ssize_t)len)
         {
             warn("unreliable send() failed");

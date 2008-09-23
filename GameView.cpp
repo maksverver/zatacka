@@ -1,10 +1,16 @@
 #include "GameView.h"
 
+/* For debugging: */
+extern unsigned g_gameid;     /* for debugging */
+char g_info[64];
+
 GameView::GameView(int players, int x, int y, int w, int h)
     : Fl_Widget(x, y, w, h),
       offscr_created(false),
       players(players), sprites(players)
 {
+    /* for debugging: */
+    sprintf(g_info, "%08x", g_gameid);
 }
 
 GameView::~GameView()
@@ -45,6 +51,13 @@ void GameView::draw()
     }
 
     fl_pop_clip();
+
+    /* For debugging: draw game id */
+    {
+        fl_color(FL_WHITE);
+        fl_font(FL_HELVETICA, 20);
+        fl_draw(g_info, 10, h() - 10);
+    }
 }
 
 void GameView::plot(int x, int y, Fl_Color c)

@@ -1,11 +1,10 @@
 General:
- - allow multiple controls per player
- - port to windows
+ - create start-up GUI to configure server and keys (1)
+ - allow multiple players per client (2)
 
 Client:
- - make resolution configurable
- - support full-screen
+ - make resolution configurable (3)
+ - support full-screen (3)
 
 Server:
- - kill player that intersects a path
-
+ - debug!

@@ -187,30 +187,26 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             unsigned char m = buf[pos++];
             if (t < g_players[n].timestamp) continue;
 
-            if (m == 0)
-            {
-                /* no further move known yet */
-                pos += timestamp - t;
-                break;
-            }
+            /* If move not yet known; skip. All other moves must be 0 too! */
+            if (m == 0) continue;
 
             switch (m)
             {
             default:
-                error("Invalid move (%d) interpreted as 1 %d", (int)m, t);
+                error("invalid move (%d) interpreted as 1 %d", (int)m, t);
                 /* falls through */
             case 1: /* ahead */
-		player_advance(n);
+                player_advance(n);
                 break;
 
             case 2: /* left */
-		player_turn(n, +1);
-		player_advance(n);
+                player_turn(n, +1);
+                player_advance(n);
                 break;
 
             case 3: /* right */
-		player_turn(n, -1);
-		player_advance(n);
+                player_turn(n, -1);
+                player_advance(n);
                 break;
 
             case 4: /* dead */
