@@ -369,6 +369,7 @@ int main(int argc, char *argv[])
         size_t pos = 0;
 
         packet[pos++] = MRCS_HELO;
+        packet[pos++] = PROTOCOL_VERSION;
         packet[pos++] = g_my_names.size();
         for (size_t n = 0; n < g_my_names.size(); ++n)
         {

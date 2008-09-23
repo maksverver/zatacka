@@ -61,6 +61,7 @@ typedef struct Client
 {
     /* Set to true only if this client is currently in use */
     bool            in_use;
+    int             protocol;      /* protocol version used by the client */
 
     /* Remote address (TCP only) */
     struct sockaddr_in sa_remote;
@@ -311,19 +312,26 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
     /* Check if players have already been registered */
     if (cl->players[0].in_use) return;
 
-    size_t pos = 1;
-    if (pos >= len)
+    if (len < 3)
     {
         client_disconnect(cl, "(HELO) truncated packet");
         return;
     }
-    int P = buf[pos++];
+    cl->protocol = buf[1];
+    if (cl->protocol != 1)
+    {
+        client_disconnect(cl, "(HELO) unsupported protocol (expected 1)");
+        return;
+    }
+
+    int P = buf[2];
     if (P < 1 || P > PLAYERS_PER_CLIENT)
     {
         client_disconnect(cl, "(HELO) invalid number of players");
         return;
     }
-    info("HELO P=%d\n", P);
+
+    size_t pos = 3;
     for (int p = 0; p < P; ++p)
     {
         Player *pl = &cl->players[p];
@@ -453,7 +461,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
                 /* Check for out-of-bounds or overlapping dots */
                 if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
-                     plot(nx, ny, pl->index + 1) != 0 )
+                    plot(nx, ny, pl->index + 1) != 0 )
                 {
                     player_kill(pl);
                 }

@@ -1,6 +1,8 @@
 #ifndef PROTOCOL_H_INCLUDED
 #define PROTOCOL_H_INCLUDED
 
+#define PROTOCOL_VERSION (1)
+
 /* reliable client->server */
 #define MRCS_HELO      (0)
 #define MRCS_QUIT      (1)
