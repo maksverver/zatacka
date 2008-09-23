@@ -5,7 +5,7 @@
 #include <sys/types.h>
 
 #ifdef _MSC_VER
-typedef size_t ssize_t;
+typedef int ssize_t;
 #else
 #include <unistd.h>
 #endif
