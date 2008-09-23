@@ -30,6 +30,8 @@ struct Player
 Fl_Window *g_window;    /* main window */
 GameView *g_gv;         /* graphical game view */
 ScoreView *g_sv;        /* score view */
+char g_gameid_text[64]; /* game id label text */
+Fl_Box *g_gameid_box;   /* box displaying the current game id in its label */
 ClientSocket *g_cs;     /* client connection to the server */
 unsigned g_gameid;      /* current game id */
 int g_last_timestamp;   /* last timestamp received */
@@ -88,6 +90,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_num_players   = buf[pos++];
     g_gameid = (buf[pos] << 24) | (buf[pos + 1] << 16) | (buf[pos + 2] << 8) | (buf[pos + 3] << 0);
     pos += 4;
+
+    /* Update gameid label */
+    sprintf(g_gameid_text, "%08X", g_gameid);
+    g_gameid_box->label(g_gameid_text);
 
     assert(pos == 11);
 
@@ -346,9 +352,14 @@ int main(int argc, char *argv[])
     /* Create main window */
     g_window = new Fl_Window(800, 600);
     g_window->label("Zatagain!");
-    g_window->color(FL_WHITE);
+    g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
     g_gv = new GameView(0, 0, 0, 600, 600);
-    g_sv = new ScoreView(600, 0, 200, 600);
+    g_sv = new ScoreView(600, 0, 200, 580);
+    g_gameid_box = new Fl_Box(600, 580, 200, 20);
+    g_gameid_box->labelfont(FL_HELVETICA);
+    g_gameid_box->labelsize(12);
+    g_gameid_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
+    g_gameid_box->align(FL_ALIGN_INSIDE);
     g_window->end();
     g_window->show();
 
