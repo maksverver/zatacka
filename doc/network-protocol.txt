@@ -29,6 +29,7 @@ Reliable packets: (server->client)
         1 byte: data rate (moves per second)
         1 byte: turn rate (moves required for 360 degree turn)
         1 byte: move rate (in 1000th parts of the field per turn)
+        1 byte: warm-up time (in turns)
         1 byte: backlog (number of moves to send in each packet)
         1 byte: number of players (P)
 

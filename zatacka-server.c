@@ -30,6 +30,7 @@
 #define TURN_RATE             (72)
 #define MOVE_RATE              (5)
 
+#define WARMUP              (SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
 struct RGB
@@ -95,6 +96,9 @@ unsigned char g_field[1000][1000];
 
 /* Convert a hue (0 <= hue < 1) to RGB */
 static struct RGB rgb_from_hue(double hue);
+
+/* Velocity at timestamp t */
+static double velocity(int t);
 
 /* Plot a dot at the given position in the given color.
    Returns the maximum value of the colors of the overlapping pixels,
@@ -169,6 +173,11 @@ static struct RGB rgb_from_hue(double hue)
     return res;
 }
 
+static double velocity(int t)
+{
+    return t < WARMUP ? 0.0 : 1.0;
+}
+
 static int plot(double x, double y, int col)
 {
     static const bool templ[7][7] = {
@@ -180,8 +189,8 @@ static int plot(double x, double y, int col)
         { 0,1,1,1,1,1,0 },
         { 0,0,1,1,1,0,0 } };
 
-    int cx = (int)round(1000*x);
-    int cy = (int)round(1000*y);
+    int cx = 1000*x;
+    int cy = 1000*y;
 
     int res = 0;
     for (int dx = -3; dx <= 3; ++dx)
@@ -439,6 +448,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             if (pl->dead_since != -1)
             {
                 pl->moves[n] = 4;
+                ++pl->timestamp;
                 continue;
             }
 
@@ -453,8 +463,10 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             {
                 if (m == 2) pl->a += 2.0*M_PI/TURN_RATE;
                 if (m == 3) pl->a -= 2.0*M_PI/TURN_RATE;
-                double nx = pl->x + 1e-3*MOVE_RATE*cos(pl->a);
-                double ny = pl->y + 1e-3*MOVE_RATE*sin(pl->a);
+
+                double v = velocity(pl->timestamp);
+                double nx = pl->x + v*1e-3*MOVE_RATE*cos(pl->a);
+                double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
 
                 /* First, blank out previous dot */
                 plot(pl->x, pl->y, 0);
@@ -471,8 +483,8 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 pl->x = nx;
                 pl->y = ny;
             }
+            ++pl->timestamp;
         }
-        pl->timestamp += added;
         assert(pl->timestamp == timestamp);
     }
 }
@@ -603,6 +615,7 @@ static void restart_game()
     packet[pos++] = SERVER_FPS;
     packet[pos++] = TURN_RATE;
     packet[pos++] = MOVE_RATE;
+    packet[pos++] = WARMUP;
     packet[pos++] = MOVE_BACKLOG;
     packet[pos++] = g_num_players;
     packet[pos++] = (g_gameid>>24)&255;

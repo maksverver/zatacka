@@ -13,7 +13,6 @@
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "comctl32.lib")
-inline double round(double a) { return floor(a+0.5); }
 #endif
 
 #define HZ 60
@@ -37,6 +36,7 @@ int g_last_timestamp;   /* last timestamp received */
 int g_data_rate;        /* moves per second (currently also display FPS) */
 int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
 int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
+int g_warmup;           /* number of turns to wait before moving forward */
 int g_move_backlog;     /* number of moves to cache and send/receive */
 int g_num_players;      /* number of players in the game == g_players.size() */
 
@@ -49,8 +49,8 @@ std::vector<Player> g_players;  /* all players in the game */
 static void plot_player(int n)
 {
     g_gv->plot(
-        (int)round(g_gv->w() * g_players[n].x),
-        g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
+        (int)(g_gv->w() * g_players[n].x),
+        g_gv->h() - 1 - (int)(g_gv->h() * g_players[n].y),
         g_players[n].col );
 }
 
@@ -72,7 +72,7 @@ static void handle_DISC(unsigned char *buf, size_t len)
 
 static void handle_STRT(unsigned char *buf, size_t len)
 {
-    if (len < 10)
+    if (len < 11)
     {
         fatal("(STRT) packet too short");
         return;
@@ -83,12 +83,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_data_rate     = buf[pos++];
     g_turn_rate     = buf[pos++];
     g_move_rate     = buf[pos++];
+    g_warmup        = buf[pos++];
     g_move_backlog  = buf[pos++];
     g_num_players   = buf[pos++];
     g_gameid = (buf[pos] << 24) | (buf[pos + 1] << 16) | (buf[pos + 2] << 8) | (buf[pos + 3] << 0);
     pos += 4;
 
-    assert(pos == 10);
+    assert(pos == 11);
 
     info("Restarting game with %d players", g_num_players);
     g_players = std::vector<Player>(g_num_players);
@@ -128,8 +129,8 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     for (int n = 0; n < g_num_players; ++n)
     {
-        g_gv->setSprite(n, (int)round(g_gv->w()*g_players[n].x),
-                           (int)round(g_gv->h()*g_players[n].y),
+        g_gv->setSprite(n, (int)(g_gv->w()*g_players[n].x),
+                           (int)(g_gv->h()*g_players[n].y),
                            g_players[n].a, g_players[n].col);
         g_gv->showSprite(n);
     }
@@ -152,10 +153,16 @@ static void player_turn(int n, int dir)
     g_players[n].a += dir*2.0*M_PI/g_turn_rate;
 }
 
+static double velocity(int t)
+{
+    return t < g_warmup ? 0.0 : 1.0;
+}
+
 static void player_advance(int n)
 {
-    g_players[n].x += 1e-3*g_move_rate*cos(g_players[n].a);
-    g_players[n].y += 1e-3*g_move_rate*sin(g_players[n].a);
+    double v = velocity(g_players[n].timestamp);
+    g_players[n].x += v*1e-3*g_move_rate*cos(g_players[n].a);
+    g_players[n].y += v*1e-3*g_move_rate*sin(g_players[n].a);
 }
 
 static void forward_to(int timestamp)
@@ -258,10 +265,18 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             plot_player(n);
             g_players[n].timestamp++;
         }
-        g_gv->setSprite( n,
-                         (int)round(g_gv->w() * g_players[n].x),
-                         g_gv->h() - 1 - (int)round(g_gv->h() * g_players[n].y),
-                         g_players[n].a, g_players[n].col );
+
+        if (timestamp < g_warmup)
+        {
+            g_gv->setSprite( n,
+                            (int)(g_gv->w() * g_players[n].x),
+                            g_gv->h() - 1 - (int)(g_gv->h() * g_players[n].y),
+                            g_players[n].a, g_players[n].col );
+        }
+        else
+        {
+            g_gv->hideSprite(n);
+        }
     }
 
     forward_to(timestamp + 1);

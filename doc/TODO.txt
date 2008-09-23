@@ -1,5 +1,4 @@
 General:
- - disallow moves forward for the first N frames, then hide sprites
  - kill last player after timeout period (5 sec?)
  - send score board update after a player dies
  - keep player colors between rounds
