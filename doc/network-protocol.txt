@@ -41,6 +41,13 @@ Reliable packets: (server->client)
         1 byte: name length (N; 1 <= N < 20)
         N bytes: name
 
+   67 Scores
+        for each player:
+            2 bytes  total score
+            2 bytes  score this game
+            2 bytes  score over last 10 games
+            2 bytes  reserved (0)
+
 Unreliable packets: (client->server)
  128 Moves
         4 bytes: game id

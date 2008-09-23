@@ -35,9 +35,15 @@ void GameView::draw()
     /* Draw background */
     fl_copy_offscreen(x(), y(), w(), h(), offscr, 0, 0);
 
+    /* Draw bounding rectangle */
+    fl_color(fl_gray_ramp(FL_NUM_GRAY/2));
+    fl_rect(x(), y(), w(), h());
+
     /* Draw player sprites */
     for (int n = 0; n < players; ++n)
     {
+        if (!sprites[n].visible) continue;
+
         fl_push_matrix();
         fl_translate(sprites[n].x, sprites[n].y);
         fl_rotate(180/M_PI*sprites[n].a);
@@ -77,10 +83,30 @@ void GameView::damageSprite(int n)
 void GameView::setSprite(int n, int x, int y, double a, Fl_Color col)
 {
     assert(n >= 0 && (size_t)n < sprites.size());
-    damageSprite(n);
+    if (sprites[n].visible) damageSprite(n);
     sprites[n].x = x;
     sprites[n].y = y;
     sprites[n].a = a;
     sprites[n].col = col;
-    damageSprite(n);
+    if (sprites[n].visible) damageSprite(n);
+}
+
+void GameView::showSprite(int n)
+{
+    assert(n >= 0 && (size_t)n < sprites.size());
+    if (!sprites[n].visible)
+    {
+        sprites[n].visible = true;
+        damageSprite(n);
+    }
+}
+
+void GameView::hideSprite(int n)
+{
+    assert(n >= 0 && (size_t)n < sprites.size());
+    if (sprites[n].visible)
+    {
+        sprites[n].visible = false;
+        damageSprite(n);
+    }
 }

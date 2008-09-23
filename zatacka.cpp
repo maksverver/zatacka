@@ -1,6 +1,7 @@
 #include "common.h"
 #include "Debug.h"
 #include "GameView.h"
+#include "ScoreView.h"
 #include "ClientSocket.h"
 #include "Protocol.h"
 #include <algorithm>
@@ -23,6 +24,7 @@ struct Player
 /* Global variables*/
 Fl_Window *g_window;    /* main window */
 GameView *g_gv;         /* graphical game view */
+ScoreView *g_sv;        /* score view */
 ClientSocket *g_cs;     /* client connection to the server */
 unsigned g_gameid;      /* current game id */
 int g_last_timestamp;   /* last timestamp received */
@@ -110,7 +112,20 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_gv->setSprite(n, (int)round(g_gv->w()*g_players[n].x),
                            (int)round(g_gv->h()*g_players[n].y),
                            g_players[n].a, g_players[n].col);
+        g_gv->showSprite(n);
     }
+
+    /* TEMP: update scores */
+    std::vector<std::string> names;
+    std::vector<int> scores;
+    std::vector<Fl_Color> colors;
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        names.push_back(g_players[n].name);
+        scores.push_back(0);
+        colors.push_back(g_players[n].col);
+    }
+    g_sv->update(names, scores, colors);
 }
 
 static void player_turn(int n, int dir)
@@ -210,6 +225,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 break;
 
             case 4: /* dead */
+                g_gv->hideSprite(n);
                 break;
             }
 
@@ -282,7 +298,9 @@ int main(int argc, char *argv[])
 
     /* Create main window */
     g_window = new Fl_Window(800, 600);
+    g_window->color(FL_WHITE);
     g_gv = new GameView(0, 0, 0, 600, 600);
+    g_sv = new ScoreView(600, 0, 200, 600);
     g_window->end();
     g_window->show();
 
@@ -296,7 +314,14 @@ int main(int argc, char *argv[])
 
     /* Send hello message */
     char packet[64];
-    sprintf(packet + 2, "player-%d", (int)getpid());
+    if (argc > 3)
+    {
+        strncpy(packet + 2, argv[3], 21);
+    }
+    else
+    {
+        sprintf(packet + 2, "player-%d", (int)getpid());
+    }
     packet[0] = 0;
     packet[1] = strlen(packet + 2);
     g_cs->write(packet, 2 + packet[1], true);

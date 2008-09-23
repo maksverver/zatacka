@@ -94,7 +94,8 @@ unsigned char g_field[1000][1000];
 static struct RGB rgb_from_hue(double hue);
 
 /* Plot a dot at the given position in the given color.
-   Returns the maximum value of the colors of the overlapping pixels. */
+   Returns the maximum value of the colors of the overlapping pixels,
+   or 256 if the dot falls(partially) outside the field. */
 static int plot(double x, double y, int col);
 
 /* Disconnect a client (sending the given reason, if possible) */
@@ -187,6 +188,10 @@ static int plot(double x, double y, int col)
             {
                 if (g_field[y][x] > res) res = g_field[y][x];
                 g_field[y][x] = col;
+            }
+            else
+            {
+                res = 256;
             }
         }
     }
@@ -723,13 +728,14 @@ static int run()
                 }
                 else
                 {
-                    /* Initialize new client slot */
-                    memset(&g_clients[n], 0, sizeof(g_clients[n]));
-                    g_clients[n].in_use    = true;
-                    g_clients[n].sa_remote = sa;
-                    g_clients[n].fd_stream = fd;
                     info( "Accepted client from %s:%d in slot #%d",
                           inet_ntoa(sa.sin_addr), ntohs(sa.sin_port), n );
+
+                    /* Initialize new client slot */
+                    memset(&g_clients[n], 0, sizeof(g_clients[n]));
+                    g_clients[n].sa_remote = sa;
+                    g_clients[n].fd_stream = fd;
+                    g_clients[n].in_use    = true;
                     g_num_clients += 1;
                 }
             }

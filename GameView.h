@@ -5,6 +5,9 @@
 
 struct Sprite
 {
+    Sprite() : visible(), x(), y(), a() { };
+
+    bool visible;
     int x, y;
     double a;
     Fl_Color col;
@@ -18,6 +21,8 @@ public:
 
     void plot(int x, int y, Fl_Color c);
     void setSprite(int n, int x, int y, double a, Fl_Color col);
+    void showSprite(int n);
+    void hideSprite(int n);
 
 protected:
     void useOffscreen();
