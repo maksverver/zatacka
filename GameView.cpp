@@ -1,4 +1,5 @@
 #include "GameView.h"
+#include <algorithm>
 
 GameView::GameView(int sprites, int x, int y, int w, int h)
     : Fl_Widget(x, y, w, h), offscr_created(false), sprites(sprites)
@@ -57,13 +58,30 @@ void GameView::draw()
     fl_pop_clip();
 }
 
-void GameView::plot(int x, int y, Fl_Color c)
+void GameView::dot(double x, double y, Fl_Color c)
 {
+    double w = 0.007*this->w(), h = 0.007*this->h();
+    int ix = (int)(this->w()*x - 0.5*w);
+    int iy = (int)(this->h()*(1.0 - y) - 0.5*h);
+    int iw = (int)(w + 0.5);
+    int ih = (int)(h + 0.5);
+
     fl_begin_offscreen(offscr);
     fl_color(c);
-    fl_pie(x - 3, y - 3, 6, 6, 0, 360);
+    fl_pie(ix, iy, iw, ih, 0, 360);
     fl_end_offscreen();
-    damage(1, x - 3, y - 3, 6, 6);
+    damage(1, ix, iy, iw, ih);
+}
+
+void GameView::line(double x1, double y1, double x2, double y2, Fl_Color c)
+{
+    double dx = (x2 - x1)/4, dy = (y2 - y1)/4;
+    for (int n = 0; n < 4; ++n)
+    {
+        dot(x1, y1, c);
+        x1 += dx;
+        y1 += dy;
+    }
 }
 
 void GameView::damageSprite(int n)
@@ -71,7 +89,7 @@ void GameView::damageSprite(int n)
     damage(1, sprites[n].x - 24, sprites[n].y - 12, 48, 36);
 
     int text_width = 12*sprites[n].label.size();
-    damage(1, sprites[n].x - text_width/2, sprites[n].y - 12, text_width, 36);
+    damage(1, sprites[n].x - text_width/2, sprites[n].y - 12, text_width, 40);
 }
 
 void GameView::setSprite( int n, int x, int y, double a,

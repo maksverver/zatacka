@@ -1,4 +1,5 @@
 #include "common.h"
+#include "Config.h"
 #include "Debug.h"
 #include "GameModel.h"
 #include "GameView.h"
@@ -39,15 +40,6 @@ std::vector<std::string> g_my_moves;   /* my recent moves (each g_move_backlog l
 
 std::vector<Player> g_players;  /* all players in the game */
 
-
-static void plot_player(int n)
-{
-    g_gv->plot(
-        (int)(g_gv->w() * g_players[n].x),
-        g_gv->h() - 1 - (int)(g_gv->h() * g_players[n].y),
-        g_players[n].col );
-}
-
 static void handle_MESG(unsigned char *buf, size_t len)
 {
     /* TODO */
@@ -58,9 +50,10 @@ static void handle_MESG(unsigned char *buf, size_t len)
 
 static void handle_DISC(unsigned char *buf, size_t len)
 {
-    info("Disconnected by server; reason:");
-    fwrite(buf + 1, 1, len - 1, stdout);
-    fputc('\n', stdout);
+    std::string msg = "Disconnected by sever!";
+    if (len > 1) msg += "\nReason: " + std::string((char*)buf + 1, len - 1);
+    info("%s", msg.c_str());
+    fl_alert(msg.c_str());
     exit(0);
 }
 
@@ -113,17 +106,19 @@ static void handle_STRT(unsigned char *buf, size_t len)
               n, g_players[n].name.c_str(),
               g_players[n].x, g_players[n].y, g_players[n].a );
         g_players[n].timestamp = 0;
-
-        plot_player(n);
     }
     assert((size_t)pos == len);
 
     /* Recreate game widget */
-    g_window->remove(g_gv);
-    delete g_gv;
-    g_gv = new GameView(g_num_players, 0, 0, 600, 600);
-    g_window->add(g_gv);
-    g_gv->redraw();
+    {
+        GameView *new_gv = new GameView(
+            g_num_players, g_gv->x(), g_gv->y(), g_gv->w(), g_gv->h() );
+        g_window->remove(g_gv);
+        delete g_gv;
+        g_gv = new_gv;
+        g_window->add(g_gv);
+        g_gv->redraw();
+    }
 
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -170,8 +165,12 @@ static double velocity(int t)
 static void player_advance(int n)
 {
     double v = velocity(g_players[n].timestamp);
-    g_players[n].x += v*1e-3*g_move_rate*cos(g_players[n].a);
-    g_players[n].y += v*1e-3*g_move_rate*sin(g_players[n].a);
+    if (v == 0) return;
+    double nx = g_players[n].x + v*1e-3*g_move_rate*cos(g_players[n].a);
+    double ny = g_players[n].y + v*1e-3*g_move_rate*sin(g_players[n].a);
+    g_gv->line(g_players[n].x, g_players[n].y, nx, ny, g_players[n].col);
+    g_players[n].x = nx;
+    g_players[n].y = ny;
 }
 
 static void forward_to(int timestamp)
@@ -271,7 +270,6 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 break;
             }
 
-            plot_player(n);
             g_players[n].timestamp++;
         }
 
@@ -348,24 +346,33 @@ static void disconnect()
     if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
 }
 
-int main(int argc, char *argv[])
+static void create_main_window(int width, int height, bool fullscreen)
 {
-    time_reset();
-    srand(time(NULL));
-
     /* Create main window */
-    g_window = new Fl_Window(800, 600);
+    g_window = new Fl_Window(width, height);
     g_window->label("Zatacka!");
     g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
-    g_gv = new GameView(0, 0, 0, 600, 600);
-    g_sv = new ScoreView(600, 0, 200, 580);
-    g_gameid_box = new Fl_Box(600, 580, 200, 20);
+    g_gv = new GameView(0, 0, 0, height, height);
+    g_sv = new ScoreView(height, 0, width - height, height - 20);
+    g_gameid_box = new Fl_Box(height, height - 20, width - height, 20);
     g_gameid_box->labelfont(FL_HELVETICA);
     g_gameid_box->labelsize(12);
     g_gameid_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
     g_gameid_box->align(FL_ALIGN_INSIDE);
     g_window->end();
+    if (fullscreen) g_window->fullscreen();
     g_window->show();
+}
+
+int main(int argc, char *argv[])
+{
+    /* Initialization */
+    time_reset();
+    srand(time(NULL));
+
+    /* Configuration */
+    Config cfg;
+    if (!cfg.show_window()) return 0;
 
     /* Connect to the server */
     g_cs = new ClientSocket(argc > 1 ? argv[1] : "localhost", argc > 2 ? atoi(argv[2]) : 12321);
@@ -409,9 +416,12 @@ int main(int argc, char *argv[])
         g_cs->write(packet, pos, true);
     }
 
+    /* Create window */
+    create_main_window(800, 600, false);
+
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.25, callback, NULL);
-    int res = Fl::run();
+    Fl::run();
     disconnect();
-    return res;
+    return 0;
 }

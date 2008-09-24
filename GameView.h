@@ -21,7 +21,9 @@ public:
     GameView(int sprites, int x, int y, int w, int h);
     ~GameView();
 
-    void plot(int x, int y, Fl_Color c);
+    void dot(double x, double y, Fl_Color c);
+    void line(double x1, double y1, double x2, double y2, Fl_Color c);
+
     void setSprite( int n, int x, int y, double a,
                     Fl_Color col, const std::string &label );
     void showSprite(int n);

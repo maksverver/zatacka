@@ -2,7 +2,7 @@ FLTKC=fltk/bin/fltk-config
 CFLAGS=-g -Wall -Wextra -std=c99
 CXXFLAGS=-g -Wall -Wextra -ansi `$(FLTKC) --cxxflags`
 LDFLAGS=`$(FLTKC) --ldstaticflags`
-OBJS=GameView.o ScoreView.o ClientSocket.o Debug.o
+OBJS=ClientSocket.o Config.o Debug.o GameModel.o GameView.o ScoreView.o
 
 all: zatacka zatacka-server
 
