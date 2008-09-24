@@ -11,6 +11,7 @@
 #define MRSC_MESG     (64)
 #define MRSC_DISC     (65)
 #define MRSC_STRT     (66)
+#define MRSC_SCOR     (67)
 
 /* unreliable client->server */
 #define MUCS_MOVE    (128)

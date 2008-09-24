@@ -30,6 +30,7 @@
 #define TURN_RATE             (72)
 #define MOVE_RATE              (5)
 #define VICTORY_TIME           (3)
+#define SCORE_HISTORY         (10)
 
 #define WARMUP              (SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
@@ -56,6 +57,10 @@ typedef struct Player
     struct RGB      color;
     double          x, y, a;    /* 0 <= x,y < 1; 0 < a <= 2pi */
 
+    /* Scores */
+    int             score_total;
+    int             score_moving_sum;
+    int             score_history[SCORE_HISTORY];
 } Player;
 
 
@@ -129,6 +134,9 @@ static void debug_dump_image();
 
 /* Restart the game (called when all players have died) */
 static void restart_game();
+
+/* Send scores to all client */
+static void send_scores();
 
 /* Process a server frame. */
 static void do_frame();
@@ -229,12 +237,11 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
     assert(len < (size_t)MAX_PACKET_LEN);
     if (reliable)
     {
-        unsigned char packet[MAX_PACKET_LEN + 2];
-        packet[0] = len>>8;
-        packet[1] = len&255;
-        memcpy(packet + 2, buf, len);
-        if ( send(cl->fd_stream, packet, len + 2, MSG_DONTWAIT)
-             != (ssize_t)len + 2 )
+        unsigned char header[2];
+        header[0] = len>>8;
+        header[1] = len&255;
+        if ( send(cl->fd_stream, header, 2, MSG_DONTWAIT) != 2 ||
+             send(cl->fd_stream, buf, len, MSG_DONTWAIT) != (ssize_t)len )
         {
             error("reliable send() failed");
             client_disconnect(cl, NULL);
@@ -293,8 +300,26 @@ static void player_kill(Player *pl)
 
     info("player %d died.", pl->index);
 
+    /* Set player dead */
     pl->dead_since = g_timestamp;
     --g_num_alive;
+
+    /* Give remaining players a point.
+       NB. if two players die in the same turn, they both get a point from
+           each other's death. */
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        if (g_players[n] == pl) continue;
+        if ( g_players[n]->dead_since == -1 ||
+             g_players[n]->dead_since >= g_timestamp )
+        {
+            g_players[n]->score_total += 1;
+            g_players[n]->score_moving_sum += 1;
+            g_players[n]->score_history[0] += 1;
+        }
+    }
+
+    send_scores();
 }
 
 static void handle_packet( Client *cl, unsigned char *buf, size_t len,
@@ -564,6 +589,18 @@ static void restart_game()
     if (g_num_clients == 0) return;
     if (g_num_players > 0) debug_dump_image();
 
+    /* Update scores */
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        Player *pl = g_players[n];
+        pl->score_moving_sum -= pl->score_history[SCORE_HISTORY - 1];
+        for (int s = SCORE_HISTORY - 1; s > 0; --s)
+        {
+            pl->score_history[s] = pl->score_history[s - 1];
+        }
+        pl->score_history[0] = 0;
+    }
+
     memset(g_field, 0, sizeof(g_field));
 
     /* Find players for the next game */
@@ -647,6 +684,28 @@ static void restart_game()
 
     /* Send start packet to all clients */
     client_broadcast(packet, pos, true);
+    send_scores();
+}
+
+static void send_scores()
+{
+    unsigned char packet[MAX_PACKET_LEN];
+    size_t pos = 0;
+
+    packet[pos++] = MRSC_SCOR;
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        packet[pos++] = g_players[n]->score_total >> 8;
+        packet[pos++] = g_players[n]->score_total&255;
+        packet[pos++] = g_players[n]->score_history[0] >> 8;
+        packet[pos++] = g_players[n]->score_history[0]&255;
+        packet[pos++] = g_players[n]->score_moving_sum >> 8;
+        packet[pos++] = g_players[n]->score_moving_sum&255;
+        packet[pos++] = 0;
+        packet[pos++] = 0;
+    }
+    client_broadcast(packet, pos, true);
+
 }
 
 static void do_frame()

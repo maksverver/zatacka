@@ -1,5 +1,6 @@
 #include "common.h"
 #include "Debug.h"
+#include "GameModel.h"
 #include "GameView.h"
 #include "ScoreView.h"
 #include "ClientSocket.h"
@@ -16,15 +17,6 @@
 #endif
 
 #define HZ 60
-
-struct Player
-{
-    Fl_Color    col;
-    double      x, y, a;
-    bool        dead;
-    std::string name;
-    int         timestamp;
-};
 
 /* Global variables*/
 Fl_Window *g_window;    /* main window */
@@ -141,18 +133,28 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_gv->showSprite(n);
     }
 
-    /* TEMP: update scores */
-    std::vector<std::string> names;
-    std::vector<int> scores;
-    std::vector<Fl_Color> colors;
+    g_sv->update(g_players);
+}
+
+static void handle_SCOR(unsigned char *buf, size_t len)
+{
+    if (len < 1 + 8*(size_t)g_num_players)
+    {
+        error("(SCOR) packet too short");
+    }
+
+    size_t pos = 1;
     for (int n = 0; n < g_num_players; ++n)
     {
-        names.push_back(g_players[n].name);
-        scores.push_back(0);
-        colors.push_back(g_players[n].col);
+        g_players[n].score_tot = 256*buf[pos + 0] + buf[pos + 1];
+        g_players[n].score_cur = 256*buf[pos + 2] + buf[pos + 3];
+        g_players[n].score_avg = 256*buf[pos + 4] + buf[pos + 5];
+        pos += 8;
     }
-    g_sv->update(names, scores, colors);
+
+    g_sv->update(g_players);
 }
+
 
 static void player_turn(int n, int dir)
 {
@@ -314,11 +316,13 @@ static void handle_packet(unsigned char *buf, size_t len)
     info("packet type %d of length %d received", (int)buf[0], len);
     hex_dump(buf, len);
     */
+
     switch ((int)buf[0])
     {
     case MRSC_MESG: return handle_MESG(buf, len);
     case MRSC_DISC: return handle_DISC(buf, len);
     case MRSC_STRT: return handle_STRT(buf, len);
+    case MRSC_SCOR: return handle_SCOR(buf, len);
     case MUSC_MOVE: return handle_MOVE(buf, len);
     default: error("invalid message type");
     }
