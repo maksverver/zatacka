@@ -979,6 +979,7 @@ static int run()
 
 int main(int argc, char *argv[])
 {
+    srand(time(NULL));
     time_reset();
 
     (void)argc;
