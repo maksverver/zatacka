@@ -22,6 +22,10 @@ public:
     void write(void const *buf, size_t len, bool reliable);
     ssize_t read(void *buf, size_t len);
 
+protected:
+    /* reads the next available packet from the stream buffer (if any) */
+    ssize_t next_stream_packet(void *buf, size_t buf_len);
+
 private:
     int fd_stream;
     int fd_packet;
