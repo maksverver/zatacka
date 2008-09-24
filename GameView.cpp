@@ -1,9 +1,7 @@
 #include "GameView.h"
 
-GameView::GameView(int players, int x, int y, int w, int h)
-    : Fl_Widget(x, y, w, h),
-      offscr_created(false),
-      players(players), sprites(players)
+GameView::GameView(int sprites, int x, int y, int w, int h)
+    : Fl_Widget(x, y, w, h), offscr_created(false), sprites(sprites)
 {
 }
 
@@ -34,7 +32,7 @@ void GameView::draw()
     fl_rect(x(), y(), w(), h());
 
     /* Draw player sprites */
-    for (int n = 0; n < players; ++n)
+    for (size_t n = 0; n < sprites.size(); ++n)
     {
         if (!sprites[n].visible) continue;
 
@@ -48,6 +46,12 @@ void GameView::draw()
         fl_vertex( -9, -7);
         fl_end_polygon();
         fl_pop_matrix();
+
+        fl_font(FL_HELVETICA, 12);
+        fl_color(FL_WHITE);
+        fl_draw( sprites[n].label.c_str(),
+                 sprites[n].x, sprites[n].y + 12, 0, 12,
+                 FL_ALIGN_CENTER );
     }
 
     fl_pop_clip();
@@ -64,10 +68,14 @@ void GameView::plot(int x, int y, Fl_Color c)
 
 void GameView::damageSprite(int n)
 {
-    damage(1, sprites[n].x - 12, sprites[n].y - 12, 24, 24);
+    damage(1, sprites[n].x - 24, sprites[n].y - 12, 48, 36);
+
+    int text_width = 12*sprites[n].label.size();
+    damage(1, sprites[n].x - text_width/2, sprites[n].y - 12, text_width, 36);
 }
 
-void GameView::setSprite(int n, int x, int y, double a, Fl_Color col)
+void GameView::setSprite( int n, int x, int y, double a,
+                          Fl_Color col, const std::string &label )
 {
     assert(n >= 0 && (size_t)n < sprites.size());
     if (sprites[n].visible) damageSprite(n);
@@ -75,6 +83,7 @@ void GameView::setSprite(int n, int x, int y, double a, Fl_Color col)
     sprites[n].y = y;
     sprites[n].a = a;
     sprites[n].col = col;
+    sprites[n].label = label;
     if (sprites[n].visible) damageSprite(n);
 }
 

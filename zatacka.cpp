@@ -129,7 +129,8 @@ static void handle_STRT(unsigned char *buf, size_t len)
     {
         g_gv->setSprite(n, (int)(g_gv->w()*g_players[n].x),
                            (int)(g_gv->h()*g_players[n].y),
-                           g_players[n].a, g_players[n].col);
+                           g_players[n].a, g_players[n].col,
+                           g_players[n].name );
         g_gv->showSprite(n);
     }
 
@@ -276,10 +277,9 @@ static void handle_MOVE(unsigned char *buf, size_t len)
 
         if (timestamp < g_warmup)
         {
-            g_gv->setSprite( n,
-                            (int)(g_gv->w() * g_players[n].x),
+            g_gv->setSprite( n, (int)(g_gv->w() * g_players[n].x),
                             g_gv->h() - 1 - (int)(g_gv->h() * g_players[n].y),
-                            g_players[n].a, g_players[n].col );
+                            g_players[n].a, g_players[n].col, g_players[n].name );
         }
         else
         {
@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
 
     /* Create main window */
     g_window = new Fl_Window(800, 600);
-    g_window->label("Zatagain!");
+    g_window->label("Zatacka!");
     g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
     g_gv = new GameView(0, 0, 0, 600, 600);
     g_sv = new ScoreView(600, 0, 200, 580);

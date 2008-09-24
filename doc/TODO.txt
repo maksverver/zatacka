@@ -1,12 +1,11 @@
 General:
- - keep player colors between rounds
- - holes in snakes
+ - holes in snakes (3)
+ - keep player colors between rounds (optional)
 
 Client:
- - display name labels during warmup
  - create start-up GUI to configure server and keys (1)
- - make resolution configurable (3)
- - support full-screen (3)
+ - make resolution configurable (2)
+ - support full-screen (2)
  - refactor client so the GameView and ScoreView share a common model,
    and the main functions only update this model (and notifiy the views)
 
