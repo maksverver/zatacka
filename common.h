@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <Fl/Fl.H>
 #include <Fl/Fl_Widget.H>
 #include <Fl/Fl_Box.H>

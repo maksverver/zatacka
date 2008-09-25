@@ -360,7 +360,7 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
     }
 
     int P = buf[2];
-    if (P < 1 || P > PLAYERS_PER_CLIENT)
+    if (P > PLAYERS_PER_CLIENT)
     {
         client_disconnect(cl, "(HELO) invalid number of players");
         return;

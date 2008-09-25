@@ -21,6 +21,9 @@ public:
     const std::string &name(int n) const { return m_names[n]; }
     int key(int n, int m) const { return m_keys[n][m]; }
 
+protected:
+    bool copy_settings();
+
 private:
     bool start;
 
@@ -42,7 +45,7 @@ private:
     Fl_Group *w_display;
     Fl_Choice *w_resolution;
     Fl_Check_Button *w_fullscreen;
-    Fl_Input *w_host;
+    Fl_Input *w_hostname;
     Fl_Input *w_port;
     Fl_Check_Button *w_players[4];
     Fl_Input *w_names[4];

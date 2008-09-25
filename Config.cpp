@@ -1,5 +1,20 @@
 #include "Config.h"
 
+/* Possible window sizes */
+static const int res_count = 5;
+static const int res_default = 1;
+static const char * const res_str[res_count] = {
+    "640x480", "800x600", "1024x768", "1280x960", "1680x1050" };
+static const int res_width[res_count]  = {  640,  800, 1024, 1280, 1680 };
+static const int res_height[res_count] = {  480,  600,  768,  960, 1050 };
+
+/* Key sets (static for now) */
+static const char *key_str[4][2] = {
+    { "@<-", "@->" }, { "A", "D" }, { "M", "." }, { "4", "6" } };
+static const int key_num[4][2] = {
+    { FL_Left, FL_Right }, { 'A', 'D' }, { 'M', '.' }, { '4', '6' } };
+
+
 Config::Config()
 {
 }
@@ -8,13 +23,50 @@ Config::~Config()
 {
 }
 
-void start_cb(Fl_Widget *button, void *arg)
+bool Config::copy_settings()
 {
-    (void)button;
+    /* Copy settings */
+    m_fullscreen = w_fullscreen->value();
+    m_width  = res_width[w_resolution->value()];
+    m_height = res_height[w_resolution->value()];
+
+    /* Network config */
+    m_hostname = w_hostname->value();
+    m_port = atoi(w_port->value());
+
+    /* Players */
+    m_players = 0;
+    for (int n = 0; n < 4; ++n)
+    {
+        if (!w_players[n]->value()) continue;
+        m_names[m_players] = w_names[n]->value();
+        m_keys[m_players][0] = key_num[n][0];
+        m_keys[m_players][1] = key_num[n][1];
+        m_players += 1;
+    }
+
+    return true;
+}
+
+void start_cb(Fl_Widget *w, void *arg)
+{
+    (void)w;
 
     Config *cfg = (Config*)arg;
-    cfg->start = true;
-    cfg->win->hide();
+    if (cfg->copy_settings())
+    {
+        /* Close window succesfully */
+        cfg->start = true;
+        cfg->win->hide();
+    }
+}
+
+static void player_check_button_cb(Fl_Widget *w, void *arg)
+{
+    Fl_Check_Button *b = (Fl_Check_Button*)w;
+    Fl_Widget *wa = (Fl_Widget*)arg;
+    if (b->value() == 0) wa->deactivate();
+    if (b->value() == 1) wa->activate();
 }
 
 bool Config::show_window()
@@ -26,20 +78,19 @@ bool Config::show_window()
 
     Fl_Group *display = new Fl_Group(10, 30, 280, 80, "Display");
     display->box(FL_DOWN_FRAME);
-    w_resolution = new Fl_Choice(100, 50, 170, 20, "Resolution");
-    w_resolution->add("640x480", "", NULL);
-    w_resolution->add("800x600", "", NULL);
-    w_resolution->add("1024x768", "", NULL);
-    w_resolution->add("1280x960", "", NULL);
-    w_resolution->add("1680x1050", "", NULL);
-    w_resolution->value(1);
+    w_resolution = new Fl_Choice(100, 50, 170, 20, "Window size");
+    for (int n = 0; n < res_count; ++n)
+    {
+        w_resolution->add(res_str[n], "", NULL);
+    }
+    w_resolution->value(res_default);
     w_fullscreen = new Fl_Check_Button(100, 70, 170, 20, "Fullscreen");
     display->end();
 
     Fl_Group *network = new Fl_Group(10, 140, 280, 80, "Network");
     network->box(FL_DOWN_FRAME);
-    w_host = new Fl_Input(100, 160, 160, 20, "Host name");
-    w_host->value("localhost");
+    w_hostname = new Fl_Input(100, 160, 160, 20, "Host name");
+    w_hostname->value("localhost");
     w_port = new Fl_Input(100, 180, 160, 20, "Port number");
     w_port->value("12321");
     network->end();
@@ -48,20 +99,20 @@ bool Config::show_window()
     players->box(FL_DOWN_FRAME);
     for (int n = 0; n < 4; ++n)
     {
-        static const char *keys[4][2] = {
-            { "@<-", "@->" }, { "A", "D" }, { "M", "." }, { "4", "6" } };
-
         w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
         w_names[n] = new Fl_Input(40, 270+ n*40, 160, 20);
         w_names[n]->deactivate();
-        w_keys[n][0] = new Fl_Button(210, 270+ n*40, 30, 20, keys[n][0]);
+        w_players[n]->callback(player_check_button_cb, w_names[n]);
+        w_keys[n][0] = new Fl_Button(210, 270+ n*40, 30, 20, key_str[n][0]);
         w_keys[n][0]->deactivate();
-        w_keys[n][1] = new Fl_Button(250, 270+ n*40, 30, 20, keys[n][1]);
+        w_keys[n][1] = new Fl_Button(250, 270+ n*40, 30, 20, key_str[n][1]);
         w_keys[n][1]->deactivate();
     }
     players->end();
 
-    (new Fl_Button(10, 450, 280, 30, "Start"))->callback(start_cb, this);
+    Fl_Button *w_start = new Fl_Button(10, 450, 280, 30, "Start");
+    w_start->callback(start_cb, this);
+    Fl::focus(w_start);
 
     win->end();
     win->show();

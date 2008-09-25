@@ -1,13 +1,13 @@
 General:
- - holes in snakes (3)
- - keep player colors between rounds (optional)
+ - holes in snakes
+ - support in-game chat
+ - optional: keep player colors between rounds
 
 Client:
- - create start-up GUI to configure server and keys (1)
- - make resolution configurable (2)
- - support full-screen (2)
- - refactor client so the GameView and ScoreView share a common model,
-   and the main functions only update this model (and notifiy the views)
+ - move client asynchronously (so gameplay is smooth even if
+   ping or packet loss is high)
+ - make player keys configurable
+ - (re)store last-used configuration settings
 
 Server:
  Potential bug:

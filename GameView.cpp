@@ -60,11 +60,11 @@ void GameView::draw()
 
 void GameView::dot(double x, double y, Fl_Color c)
 {
-    double w = 0.007*this->w(), h = 0.007*this->h();
-    int ix = (int)(this->w()*x - 0.5*w);
-    int iy = (int)(this->h()*(1.0 - y) - 0.5*h);
-    int iw = (int)(w + 0.5);
-    int ih = (int)(h + 0.5);
+    int r = ceil(0.003*this->w());
+    int ix = (int)(this->w()*x) - r;
+    int iy = (int)(this->h()*(1.0 - y)) - 1 - r;
+    int iw = 2*r + 1;
+    int ih = 2*r + 1;
 
     fl_begin_offscreen(offscr);
     fl_color(c);

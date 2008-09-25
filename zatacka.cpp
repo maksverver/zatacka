@@ -35,8 +35,20 @@ int g_warmup;           /* number of turns to wait before moving forward */
 int g_move_backlog;     /* number of moves to cache and send/receive */
 int g_num_players;      /* number of players in the game == g_players.size() */
 
-std::vector<std::string> g_my_names;   /* my player names */
-std::vector<std::string> g_my_moves;   /* my recent moves (each g_move_backlog long) */
+class KeyBindings
+{
+public:
+    KeyBindings(int a, int b) { keys[0] = a; keys[1] = b; };
+    int operator[] (int i) const { return i >= 0 && i < 2 ? keys[i] : 0; };
+    int left()  { return keys[0]; }
+    int right() { return keys[1]; }
+private:
+    int keys[2];
+};
+
+std::vector<std::string> g_my_names;    /* my player names */
+std::vector<KeyBindings> g_my_keys;     /* my player keys */
+std::vector<std::string> g_my_moves;    /* my recent moves (each g_move_backlog long) */
 
 std::vector<Player> g_players;  /* all players in the game */
 
@@ -175,9 +187,6 @@ static void player_advance(int n)
 
 static void forward_to(int timestamp)
 {
-    static const int keys[4][2] = {
-        { FL_Left, FL_Right }, { 'A', 'D'}, { 'M', '.'}, { '4', '6'} };
-
     assert(timestamp > g_last_timestamp);
     int delay = timestamp - g_last_timestamp;
     for (size_t n = 0; n < g_my_moves.size(); ++n)
@@ -185,8 +194,8 @@ static void forward_to(int timestamp)
         std::string &moves = g_my_moves[n];
         std::rotate(moves.begin(), moves.begin() + delay, moves.end());
         unsigned char m = 1;
-        if (Fl::event_key(keys[n][0]) && !Fl::event_key(keys[n][1])) m = 2;
-        if (Fl::event_key(keys[n][1]) && !Fl::event_key(keys[n][0])) m = 3;
+        if (Fl::event_key(g_my_keys[n][0]) && !Fl::event_key(g_my_keys[n][1])) m = 2;
+        if (Fl::event_key(g_my_keys[n][1]) && !Fl::event_key(g_my_keys[n][0])) m = 3;
         for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos)
         {
             moves[pos] = m;
@@ -352,7 +361,7 @@ static void create_main_window(int width, int height, bool fullscreen)
     g_window = new Fl_Window(width, height);
     g_window->label("Zatacka!");
     g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
-    g_gv = new GameView(0, 0, 0, height, height);
+    g_gv = new GameView(0, 2, 2, height - 4, height - 4);
     g_sv = new ScoreView(height, 0, width - height, height - 20);
     g_gameid_box = new Fl_Box(height, height - 20, width - height, 20);
     g_gameid_box->labelfont(FL_HELVETICA);
@@ -366,6 +375,9 @@ static void create_main_window(int width, int height, bool fullscreen)
 
 int main(int argc, char *argv[])
 {
+    (void)argc;
+    (void)argv;
+
     /* Initialization */
     time_reset();
     srand(time(NULL));
@@ -375,7 +387,7 @@ int main(int argc, char *argv[])
     if (!cfg.show_window()) return 0;
 
     /* Connect to the server */
-    g_cs = new ClientSocket(argc > 1 ? argv[1] : "localhost", argc > 2 ? atoi(argv[2]) : 12321);
+    g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
     if (!g_cs->connected())
     {
         error("Couldn't connect to server.");
@@ -383,20 +395,10 @@ int main(int argc, char *argv[])
     }
 
     /* Set-up names */
-    while (g_my_names.size() < 4 && 3 + (int)g_my_names.size() < argc)
+    for (int n = 0; n < cfg.players(); ++n)
     {
-        g_my_names.push_back(argv[3 + g_my_names.size()]);
-        if (g_my_names.back().size() > 20)
-        {
-            g_my_names.back().erase(
-                g_my_names.back().begin() + 20, g_my_names.back().end() );
-        }
-    }
-    if (g_my_names.empty())
-    {
-        char name[16];
-        sprintf(name, "player-%04x", rand()&0xffff);
-        g_my_names.push_back(name);
+        g_my_names.push_back(cfg.name(n));
+        g_my_keys.push_back(KeyBindings(cfg.key(n, 0), cfg.key(n, 1)));
     }
 
     /* Send hello message */
@@ -417,7 +419,7 @@ int main(int argc, char *argv[])
     }
 
     /* Create window */
-    create_main_window(800, 600, false);
+    create_main_window(cfg.width(), cfg.height(), cfg.fullscreen());
 
     /* FIXME: should wait for window to be visible */
     Fl::add_timeout(0.25, callback, NULL);
