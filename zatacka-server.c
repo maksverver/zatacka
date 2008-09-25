@@ -29,12 +29,12 @@
 #define PLAYERS_PER_CLIENT     (4)
 #define TURN_RATE             (72)
 #define MOVE_RATE              (5)
-#define VICTORY_TIME           (3)
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY     (100)
 #define HOLE_LENGTH_MIN        (3)
 #define HOLE_LENGTH_MAX        (9)
 
+#define VICTORY_TIME        (3*SERVER_FPS)
 #define WARMUP              (3*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
@@ -99,6 +99,7 @@ typedef struct Client
 static int g_fd_listen;         /* Stream data listening socket */
 static int g_fd_packet;         /* Packet data socket */
 static int g_timestamp;         /* Time counter */
+static int g_deadline;          /* Game ends at this time */
 static int g_num_clients;       /* Number of connected clients */
 static int g_num_players;       /* Number of people in the current game */
 static int g_num_alive;         /* Number of people still alive */
@@ -315,6 +316,11 @@ static void player_kill(Player *pl)
     /* Set player dead */
     pl->dead_since = g_timestamp;
     --g_num_alive;
+    if (g_num_alive <= 1 && g_deadline == -1)
+    {
+        /* End the game after a fixed number of seconds */
+        g_deadline = g_timestamp + VICTORY_TIME;
+    }
 
     /* Give remaining players a point.
        NB. if two players die in the same turn, they both get a point from
@@ -652,6 +658,7 @@ static void debug_dump_image()
 static void restart_game()
 {
     g_timestamp = 0;
+    g_deadline = -1;
     time_reset();
 
     if (g_num_clients == 0) return;
@@ -790,26 +797,10 @@ static void do_frame()
 {
     if (g_num_clients == 0) return;
 
-    if (g_num_alive == 0) restart_game();
-
-    if (g_num_alive == 1)
+    if ( (g_num_alive == 0 && g_deadline == -1) ||
+         (g_deadline != -1 && g_timestamp >= g_deadline) )
     {
-        /* Find out when last opponent died */
-        int g_last_kill = -1;
-        for (int n = 0; n < g_num_players; ++n)
-        {
-            if (g_players[n]->dead_since > g_last_kill)
-            {
-                g_last_kill = g_players[n]->dead_since;
-            }
-        }
-
-        if ( g_last_kill != -1 &&
-             g_timestamp - g_last_kill > SERVER_FPS*VICTORY_TIME )
-        {
-            /* People are waiting; restart already! */
-            restart_game();
-        }
+        restart_game();
     }
 
     if (g_num_players == 0) return;
