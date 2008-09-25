@@ -35,7 +35,7 @@
 #define HOLE_LENGTH_MIN        (3)
 #define HOLE_LENGTH_MAX        (9)
 
-#define WARMUP              (SERVER_FPS)
+#define WARMUP              (3*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
 struct RGB
