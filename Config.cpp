@@ -1,18 +1,23 @@
 #include "Config.h"
 
 /* Possible window sizes */
-static const int res_count = 5;
+static const int res_count = 8;
 static const int res_default = 1;
 static const char * const res_str[res_count] = {
-    "640x480", "800x600", "1024x768", "1280x960", "1680x1050" };
-static const int res_width[res_count]  = {  640,  800, 1024, 1280, 1680 };
-static const int res_height[res_count] = {  480,  600,  768,  960, 1050 };
+    "640x480", "800x600", "1024x768", "1280x960",
+    "1280x1024", "1400x1050", "1600x1200", "1680x1050" };
+static const int res_width[res_count]  = {
+      640,  800, 1024, 1280,
+     1280, 1400, 1600, 1680 };
+static const int res_height[res_count] = {
+      480,  600,  768,  960,
+     1024, 1050, 1200, 1050 };
 
 /* Key sets (static for now) */
 static const char *key_str[4][2] = {
     { "@<-", "@->" }, { "A", "D" }, { "M", "." }, { "4", "6" } };
 static const int key_num[4][2] = {
-    { FL_Left, FL_Right }, { 'A', 'D' }, { 'M', '.' }, { '4', '6' } };
+    { FL_Left, FL_Right }, { 'a', 'd' }, { 'm', '.' }, { '4', '6' } };
 
 
 Config::Config()
@@ -38,7 +43,7 @@ bool Config::copy_settings()
     m_players = 0;
     for (int n = 0; n < 4; ++n)
     {
-        if (!w_players[n]->value()) continue;
+        if (!w_players[n]->value() || *w_names[n]->value() == '\0') continue;
         m_names[m_players] = w_names[n]->value();
         m_keys[m_players][0] = key_num[n][0];
         m_keys[m_players][1] = key_num[n][1];
@@ -78,20 +83,20 @@ bool Config::show_window()
 
     Fl_Group *display = new Fl_Group(10, 30, 280, 80, "Display");
     display->box(FL_DOWN_FRAME);
-    w_resolution = new Fl_Choice(100, 50, 170, 20, "Window size");
+    w_resolution = new Fl_Choice(110, 50, 170, 20, "Window size: ");
     for (int n = 0; n < res_count; ++n)
     {
         w_resolution->add(res_str[n], "", NULL);
     }
     w_resolution->value(res_default);
-    w_fullscreen = new Fl_Check_Button(100, 70, 170, 20, "Fullscreen");
+    w_fullscreen = new Fl_Check_Button(110, 70, 170, 20, "Fullscreen");
     display->end();
 
     Fl_Group *network = new Fl_Group(10, 140, 280, 80, "Network");
     network->box(FL_DOWN_FRAME);
-    w_hostname = new Fl_Input(100, 160, 160, 20, "Host name");
+    w_hostname = new Fl_Input(110, 160, 160, 20, "Host name: ");
     w_hostname->value("localhost");
-    w_port = new Fl_Input(100, 180, 160, 20, "Port number");
+    w_port = new Fl_Input(110, 180, 160, 20, "Port number: ");
     w_port->value("12321");
     network->end();
 

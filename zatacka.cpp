@@ -17,15 +17,44 @@
 #pragma comment(lib, "comctl32.lib")
 #endif
 
-#define HZ 60
+#define CLIENT_FPS 60
+
+class MainWindow : public Fl_Window
+{
+public:
+    MainWindow(int w, int h) : Fl_Window(w, h) { };
+    ~MainWindow() { };
+    int handle(int type);
+};
+
+class MainGameView : public GameView
+{
+public:
+    MainGameView(int sprites, int x, int y, int w, int h)
+        : GameView(sprites, x, y, w, h) { };
+    ~MainGameView() { };
+
+    void damageChatText();
+
+protected:
+    void draw();
+};
+
+struct ChatLine
+{
+    double time;
+    Fl_Color color;
+    std::string text;
+};
 
 /* Global variables*/
 Fl_Window *g_window;    /* main window */
-GameView *g_gv;         /* graphical game view */
+MainGameView *g_gv;     /* graphical game view */
 ScoreView *g_sv;        /* score view */
 char g_gameid_text[64]; /* game id label text */
 Fl_Box *g_gameid_box;   /* box displaying the current game id in its label */
 ClientSocket *g_cs;     /* client connection to the server */
+
 unsigned g_gameid;      /* current game id */
 int g_last_timestamp;   /* last timestamp received */
 int g_data_rate;        /* moves per second (currently also display FPS) */
@@ -39,6 +68,10 @@ int g_hole_length_max;  /* maximum length of a hole (in turns) */
 int g_move_backlog;     /* number of moves to cache and send/receive */
 int g_num_players;      /* number of players in the game == g_players.size() */
 
+bool g_am_typing;                   /* am I typing a message? */
+std::string g_my_chat_text;         /* current line */
+std::vector<ChatLine> g_chat_lines; /* previous lines */
+
 class KeyBindings
 {
 public:
@@ -46,6 +79,7 @@ public:
     int operator[] (int i) const { return i >= 0 && i < 2 ? keys[i] : 0; };
     int left()  { return keys[0]; }
     int right() { return keys[1]; }
+    bool contains(int i) { return keys[0] == i || keys[1] == i; }
 private:
     int keys[2];
 };
@@ -58,15 +92,39 @@ std::vector<Player> g_players;  /* all players in the game */
 
 static void handle_MESG(unsigned char *buf, size_t len)
 {
-    /* TODO */
-    (void)buf;
-    (void)len;
-    info("MESG received (TODO!)");
+    if (len < 2) return;
+
+    size_t name_len = buf[1];
+    if (name_len > len - 2)
+    {
+        error("(MESG) invalid name length");
+        return;
+    }
+
+    std::string name((char*)buf + 2, name_len);
+    std::string text((char*)buf + 2 + name_len, len - 2 - name_len);
+    Fl_Color color = FL_WHITE;
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        if (g_players[n].name == name)
+        {
+            color = g_players[n].col;
+            break;
+        }
+    }
+
+    ChatLine cl;
+    cl.time  = time_now();
+    cl.color = color;
+    cl.text  = name + ": " + text;
+    g_chat_lines.push_back(cl);
+    while (g_chat_lines.size() > 5) g_chat_lines.erase(g_chat_lines.begin());
+    g_gv->damageChatText();
 }
 
 static void handle_DISC(unsigned char *buf, size_t len)
 {
-    std::string msg = "Disconnected by sever!";
+    std::string msg = "Disconnected by server!";
     if (len > 1) msg += "\nReason: " + std::string((char*)buf + 1, len - 1);
     info("%s", msg.c_str());
     fl_alert(msg.c_str());
@@ -136,7 +194,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     /* Recreate game widget */
     {
-        GameView *new_gv = new GameView(
+        MainGameView *new_gv = new MainGameView(
             g_num_players, g_gv->x(), g_gv->y(), g_gv->w(), g_gv->h() );
         g_window->remove(g_gv);
         delete g_gv;
@@ -372,7 +430,15 @@ void callback(void *arg)
     }
     if (len < 0) error("socket read failed");
 
-    Fl::repeat_timeout(1.0/HZ, callback, arg);
+    /* Do timed events: */
+    double t =  time_now();
+    while (!g_chat_lines.empty() && g_chat_lines.front().time < t - 8)
+    {
+        g_chat_lines.erase(g_chat_lines.begin());
+        g_gv->damageChatText();
+    }
+
+    Fl::repeat_timeout(1.0/CLIENT_FPS, callback, arg);
 }
 
 static void disconnect()
@@ -381,13 +447,19 @@ static void disconnect()
     if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
 }
 
+static void chat_message(const std::string &msg)
+{
+    std::string packet = (char)MRCS_CHAT + msg;
+    g_cs->write(packet.data(), packet.size(), true);
+}
+
 static void create_main_window(int width, int height, bool fullscreen)
 {
     /* Create main window */
-    g_window = new Fl_Window(width, height);
+    g_window = new MainWindow(width, height);
     g_window->label("Zatacka!");
     g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
-    g_gv = new GameView(0, 2, 2, height - 4, height - 4);
+    g_gv = new MainGameView(0, 2, 2, height - 4, height - 4);
     g_sv = new ScoreView(height, 0, width - height, height - 20);
     g_gameid_box = new Fl_Box(height, height - 20, width - height, 20);
     g_gameid_box->labelfont(FL_HELVETICA);
@@ -397,6 +469,139 @@ static void create_main_window(int width, int height, bool fullscreen)
     g_window->end();
     if (fullscreen) g_window->fullscreen();
     g_window->show();
+}
+
+static char shift(char c)
+{
+    if (c >= 'a' && c <= 'z') return c - 'a' + 'A';
+    switch (c)
+    {
+    case '`': return '~';
+    case '1': return '!';
+    case '2': return '@';
+    case '3': return '#';
+    case '4': return '$';
+    case '5': return '%';
+    case '6': return '^';
+    case '7': return '&';
+    case '8': return '*';
+    case '9': return '(';
+    case '0': return ')';
+    case '-': return '_';
+    case '=': return '+';
+    case '\\': return '|';
+    case '[': return '{';
+    case ']': return '}';
+    case ';': return ':';
+    case '\'': return '"';
+    case ',': return '<';
+    case '.': return '>';
+    case '/': return '?';
+    default: return c;
+    }
+}
+
+int MainWindow::handle(int type)
+{
+    switch(type)
+    {
+        case FL_KEYDOWN:
+        {
+            int key = Fl::event_key();
+            if ( key != FL_Enter && key != FL_Escape && key != FL_BackSpace
+                 && (key < 32 || key > 126) )
+            {
+                /* Don't handle this key */
+                return 0;
+            }
+
+            /* Enter starts chat (or sends current message) */
+            if (key == FL_Enter)
+            {
+                if (!g_am_typing)
+                {
+                    g_am_typing = true;
+                }
+                else
+                {
+                    if (!g_my_chat_text.empty())
+                    {
+                        chat_message(g_my_chat_text);
+                        g_my_chat_text.clear();
+                    }
+                    g_am_typing = false;
+                }
+            }
+            else
+            if (key == FL_Escape)
+            {
+                g_am_typing = false;
+                g_my_chat_text.clear();
+            }
+            else
+            if (key == FL_BackSpace)
+            {
+                if (!g_my_chat_text.empty())
+                {
+                    g_my_chat_text.erase(g_my_chat_text.end() - 1);
+                }
+                else
+                {
+                    g_am_typing = false;
+                }
+            }
+            else
+            {
+                if (!g_am_typing)
+                {
+                    /* Start typing, except if the key pressed is also a
+                        control key. */
+                    g_am_typing = true;
+                    for (int n = 0; n < g_num_players; ++n)
+                    {
+                        if (g_my_keys[n].contains(key)) g_am_typing = false;
+                    }
+                }
+
+                if (g_am_typing && key >= 32 && key < 126)
+                {
+                    char c = Fl::event_state(FL_SHIFT) ? shift(key) : key;
+                    if (g_my_chat_text.size() < 100) g_my_chat_text += c;
+                }
+            }
+            g_gv->damageChatText();
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void MainGameView::damageChatText()
+{
+    int height = 8 + 6*16;
+    damage(1, x(), y() + h() - height, w(), height);
+}
+
+void MainGameView::draw()
+{
+    GameView::draw();
+    fl_font(FL_HELVETICA, 14);
+
+    int x = this->x() + 8, y = this->y() + h() - 8;
+    if (g_am_typing)
+    {
+        fl_color(FL_WHITE);
+        fl_draw(("> " + g_my_chat_text).c_str(), x, y);
+        y -= 16;
+    }
+
+    assert(g_chat_lines.size() <= 5);
+    for (int n = (int)g_chat_lines.size() - 1; n >= 0; --n)
+    {
+        fl_color(g_chat_lines[n].color);
+        fl_draw(g_chat_lines[n].text.c_str(), x, y);
+        y -= 16;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -410,15 +615,18 @@ int main(int argc, char *argv[])
 
     /* Configuration */
     Config cfg;
-    if (!cfg.show_window()) return 0;
+    do {
+        if (!cfg.show_window()) return 0;
 
-    /* Connect to the server */
-    g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
-    if (!g_cs->connected())
-    {
-        error("Couldn't connect to server.");
-        return 1;
-    }
+        /* Try to connect to the server */
+        g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
+        if (!g_cs->connected())
+        {
+            fl_alert( "The network connection could not be established!\n"
+                      "Please check the specified host name (%s) and port (%d)",
+                      cfg.hostname().c_str(), cfg.port() );
+        }
+    } while (!g_cs->connected());
 
     /* Set-up names */
     for (int n = 0; n < cfg.players(); ++n)

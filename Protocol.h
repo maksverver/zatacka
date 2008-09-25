@@ -6,6 +6,7 @@
 /* reliable client->server */
 #define MRCS_HELO      (0)
 #define MRCS_QUIT      (1)
+#define MRCS_CHAT      (2)
 
 /* reliable server->client */
 #define MRSC_MESG     (64)

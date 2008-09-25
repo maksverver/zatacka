@@ -15,6 +15,8 @@ Reliable packets: (client->server)
             L bytes: name
    1 Quit
         no data
+   2 Message
+        all bytes: message
 
 Reliable packets: (server->client)
   64 Message

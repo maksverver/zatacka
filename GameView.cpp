@@ -65,12 +65,11 @@ void GameView::draw()
 
         if (!sprites[n].label.empty())
         {
-            /* FIXME: this allows symbols in names :/ */
             fl_font(FL_HELVETICA, 12);
             fl_color(FL_WHITE);
             fl_draw( sprites[n].label.c_str(),
                      sprites[n].x, sprites[n].y + 12, 0, 12,
-                     FL_ALIGN_CENTER );
+                     FL_ALIGN_CENTER, NULL, 0);
         }
     }
 
