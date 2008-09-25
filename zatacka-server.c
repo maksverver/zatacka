@@ -139,6 +139,7 @@ static void handle_packet( Client *cl,
                            unsigned char *buf, size_t len, bool reliable );
 static void handle_HELO(Client *cl, unsigned char *buf, size_t len);
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len);
+static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
 
 /* Dump an image of the field in BMP format to file "bmp/field-GAMEID.bmp" */
 static void debug_dump_image();
@@ -347,8 +348,9 @@ static void handle_packet( Client *cl, unsigned char *buf, size_t len,
     switch ((int)buf[0])
     {
     case MRCS_HELO: return handle_HELO(cl, buf, len);
-    case MRCS_QUIT: return client_disconnect(cl, "client quit");
     case MUCS_MOVE: return handle_MOVE(cl, buf, len);
+    case MRCS_CHAT: return handle_CHAT(cl, buf, len);
+    case MRCS_QUIT: return client_disconnect(cl, "client quit");
     default: client_disconnect(cl, "invalid packet type");
     }
 }
@@ -506,7 +508,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 double v = velocity(pl->timestamp);
                 double nx = pl->x + v*1e-3*MOVE_RATE*cos(pl->a);
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
-                info("time=%d %d %d", pl->timestamp, pl->hole, pl->prev_hole);
+
                 /* First, blank out previous dot */
                 if (pl->prev_hole <= 0) plot(pl->x, pl->y, 0);
 
@@ -538,6 +540,47 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
         }
         assert(pl->timestamp == timestamp);
     }
+}
+
+static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
+{
+    (void)cl;
+
+    unsigned char *msg = &buf[1];
+    size_t msg_len = len - 1;
+    if (msg_len < 1) return;
+    if (msg_len > 255) msg_len = 255;   /* limit chat message length */
+
+    Player *pl = NULL;
+    for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
+    {
+        if (cl->players[n].in_use)
+        {
+            pl = &cl->players[n];
+            break;
+        }
+    }
+    if (!pl)
+    {
+        warn("Chat message from unregistered player ignored.");
+        return;
+    }
+
+    msg[msg_len] = '\0'; /* hack */
+    info("(CHAT) %s: %s", pl->name, msg);
+
+    /* Build message packet */
+    unsigned char packet[MAX_PACKET_LEN];
+    size_t pos = 0, name_len = strlen(pl->name);
+    packet[pos++] = MRSC_MESG;
+    packet[pos++] = name_len;
+    memcpy(&packet[pos], pl->name, name_len);
+    pos += name_len;
+    for (size_t n = 0; n < msg_len; ++n)
+    {
+        packet[pos++] = (msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ';
+    }
+    client_broadcast(packet, pos, true);
 }
 
 static void debug_dump_image()

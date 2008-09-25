@@ -12,7 +12,7 @@ static const int res_height[res_count] = {  480,  600,  768,  960, 1050 };
 static const char *key_str[4][2] = {
     { "@<-", "@->" }, { "A", "D" }, { "M", "." }, { "4", "6" } };
 static const int key_num[4][2] = {
-    { FL_Left, FL_Right }, { 'A', 'D' }, { 'M', '.' }, { '4', '6' } };
+    { FL_Left, FL_Right }, { 'a', 'd' }, { 'm', '.' }, { '4', '6' } };
 
 
 Config::Config()
@@ -38,7 +38,7 @@ bool Config::copy_settings()
     m_players = 0;
     for (int n = 0; n < 4; ++n)
     {
-        if (!w_players[n]->value()) continue;
+        if (!w_players[n]->value() || *w_names[n]->value() == '\0') continue;
         m_names[m_players] = w_names[n]->value();
         m_keys[m_players][0] = key_num[n][0];
         m_keys[m_players][1] = key_num[n][1];

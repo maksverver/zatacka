@@ -1,14 +1,12 @@
 General:
- - holes in snakes
- - support in-game chat
  - optional: keep player colors between rounds
  - clean up code, and make naming conventions (of classes, variables,
-   methods, etc.) more consistent.
-  
+   methods, etc.) more consistent. (Also, introduce constants for magic
+   numers where appropriate).
 
 Client:
- - move client asynchronously (so gameplay is smooth even if
-   ping or packet loss is high)
+ - move client asynchronously (so gameplay is smooth even if ping or
+   packet loss is high)
  - make player keys configurable
  - (re)store last-used configuration settings
 
