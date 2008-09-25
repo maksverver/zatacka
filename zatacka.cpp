@@ -32,6 +32,10 @@ int g_data_rate;        /* moves per second (currently also display FPS) */
 int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
 int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
 int g_warmup;           /* number of turns to wait before moving forward */
+int g_score_rounds;     /* number of rounds for the moving average score */
+int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
+int g_hole_length_min;  /* minimum length of a hole (in turns) */
+int g_hole_length_max;  /* maximum length of a hole (in turns) */
 int g_move_backlog;     /* number of moves to cache and send/receive */
 int g_num_players;      /* number of players in the game == g_players.size() */
 
@@ -77,26 +81,29 @@ static void handle_STRT(unsigned char *buf, size_t len)
         return;
     }
 
-    g_last_timestamp = -1;
+
+    /* Read game parameters */
     size_t pos = 1;
-    g_data_rate     = buf[pos++];
-    g_turn_rate     = buf[pos++];
-    g_move_rate     = buf[pos++];
-    g_warmup        = buf[pos++];
-    g_move_backlog  = buf[pos++];
-    g_num_players   = buf[pos++];
-    g_gameid = (buf[pos] << 24) | (buf[pos + 1] << 16) | (buf[pos + 2] << 8) | (buf[pos + 3] << 0);
-    pos += 4;
-
-    /* Update gameid label */
-    sprintf(g_gameid_text, "%08X", g_gameid);
-    g_gameid_box->label(g_gameid_text);
-
-    assert(pos == 11);
+    g_data_rate         = buf[pos++];
+    g_turn_rate         = buf[pos++];
+    g_move_rate         = buf[pos++];
+    g_warmup            = buf[pos++];
+    g_score_rounds      = buf[pos++];
+    g_hole_probability  = buf[pos++]*256;
+    g_hole_probability += buf[pos++];
+    g_hole_length_min   = buf[pos++];
+    g_hole_length_max   = buf[pos++] + g_hole_length_min;
+    g_move_backlog      = buf[pos++];
+    g_num_players       = buf[pos++];
+    g_gameid            = buf[pos++] << 24;
+    g_gameid           += buf[pos++] << 16;
+    g_gameid           += buf[pos++] <<  8;
+    g_gameid           += buf[pos++];
+    assert(pos == 16);
 
     info("Restarting game with %d players", g_num_players);
+    g_last_timestamp = -1;
     g_players = std::vector<Player>(g_num_players);
-
     g_my_moves = std::vector<std::string> (
         g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
 
@@ -118,8 +125,14 @@ static void handle_STRT(unsigned char *buf, size_t len)
               n, g_players[n].name.c_str(),
               g_players[n].x, g_players[n].y, g_players[n].a );
         g_players[n].timestamp = 0;
+        g_players[n].rng_base  = n^g_gameid;
+        g_players[n].rng_carry = 0;
     }
     assert((size_t)pos == len);
+
+    /* Update gameid label */
+    sprintf(g_gameid_text, "%08X", g_gameid);
+    g_gameid_box->label(g_gameid_text);
 
     /* Recreate game widget */
     {
@@ -134,11 +147,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     for (int n = 0; n < g_num_players; ++n)
     {
-        g_gv->setSprite(n, (int)(g_gv->w()*g_players[n].x),
-                           (int)(g_gv->h()*g_players[n].y),
-                           g_players[n].a, g_players[n].col,
-                           g_players[n].name );
-        g_gv->showSprite(n);
+        g_gv->setSprite(n, g_players[n].x, g_players[n].y,
+                           g_players[n].a, g_players[n].col );
+        g_gv->setSpriteType(n, Sprite::ARROW);
+        g_gv->setSpriteLabel(n, g_players[n].name);
     }
 
     g_sv->update(g_players);
@@ -180,7 +192,10 @@ static void player_advance(int n)
     if (v == 0) return;
     double nx = g_players[n].x + v*1e-3*g_move_rate*cos(g_players[n].a);
     double ny = g_players[n].y + v*1e-3*g_move_rate*sin(g_players[n].a);
-    g_gv->line(g_players[n].x, g_players[n].y, nx, ny, g_players[n].col);
+    if (g_players[n].hole == -1)
+    {
+        g_gv->line(g_players[n].x, g_players[n].y, nx, ny, g_players[n].col);
+    }
     g_players[n].x = nx;
     g_players[n].y = ny;
 }
@@ -255,6 +270,14 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             /* If move not yet known; skip. All other moves must be 0 too! */
             if (m == 0) continue;
 
+            if ( g_players[n].hole == -1 &&
+                 g_players[n].rng_base%g_hole_probability == 0)
+            {
+                g_players[n].hole = g_hole_length_min +
+                    g_players[n].rng_base/g_hole_probability%
+                    (g_hole_length_max - g_hole_length_min + 1);
+            }
+
             switch (m)
             {
             default:
@@ -275,22 +298,25 @@ static void handle_MOVE(unsigned char *buf, size_t len)
                 break;
 
             case 4: /* dead */
-                g_gv->hideSprite(n);
+                g_gv->setSpriteType(n, Sprite::HIDDEN);
                 break;
             }
 
+            if (g_players[n].hole >= 0) --g_players[n].hole;
             g_players[n].timestamp++;
+
+            unsigned long long rng_next = g_players[n].rng_base*1967773755ull
+                                        + g_players[n].rng_carry;
+            g_players[n].rng_base  = rng_next&0xffffffff;
+            g_players[n].rng_carry = rng_next>>32;
         }
 
-        if (timestamp < g_warmup)
+        g_gv->setSprite( n, g_players[n].x, g_players[n].y,
+                            g_players[n].a, g_players[n].col );
+        if (timestamp == g_warmup)
         {
-            g_gv->setSprite( n, (int)(g_gv->w() * g_players[n].x),
-                            g_gv->h() - 1 - (int)(g_gv->h() * g_players[n].y),
-                            g_players[n].a, g_players[n].col, g_players[n].name );
-        }
-        else
-        {
-            g_gv->hideSprite(n);
+            g_gv->setSpriteLabel(n, std::string());
+            g_gv->setSpriteType(n, Sprite::DOT);
         }
     }
 

@@ -101,7 +101,18 @@ bool Config::show_window()
     {
         w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
         w_names[n] = new Fl_Input(40, 270+ n*40, 160, 20);
-        w_names[n]->deactivate();
+        if (n == 0)
+        {
+            /* HACK: set default name for faster debugging */
+            static char buf[16];
+            sprintf(buf, "Player-%04x", rand()&0xffff);
+            w_names[n]->value(buf);
+            w_players[n]->value(1);
+        }
+        else
+        {
+            w_names[n]->deactivate();
+        }
         w_players[n]->callback(player_check_button_cb, w_names[n]);
         w_keys[n][0] = new Fl_Button(210, 270+ n*40, 30, 20, key_str[n][0]);
         w_keys[n][0]->deactivate();

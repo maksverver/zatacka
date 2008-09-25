@@ -2,6 +2,9 @@ General:
  - holes in snakes
  - support in-game chat
  - optional: keep player colors between rounds
+ - clean up code, and make naming conventions (of classes, variables,
+   methods, etc.) more consistent.
+  
 
 Client:
  - move client asynchronously (so gameplay is smooth even if

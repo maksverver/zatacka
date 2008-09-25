@@ -30,10 +30,15 @@ Reliable packets: (server->client)
         1 byte: turn rate (moves required for 360 degree turn)
         1 byte: move rate (in 1000th parts of the field per turn)
         1 byte: warm-up time (in turns)
+        1 byte: average score range (in rounds; >= 1)
+        2 bytes: hole probability (Hprob; 1 in Hprob turns)
+        1 byte: min hole length (Hmin; in turns)
+        1 byte: hole length range length (=Hrl; Hmax = Hmin + Hrl)
         1 byte: backlog (number of moves to send in each packet)
         1 byte: number of players (P)
-
         4 byte: game id
+
+        (Offset is 16 here)
 
         for each player:
         3 bytes: color (R, G, B)

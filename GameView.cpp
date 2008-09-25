@@ -35,24 +35,43 @@ void GameView::draw()
     /* Draw player sprites */
     for (size_t n = 0; n < sprites.size(); ++n)
     {
-        if (!sprites[n].visible) continue;
+        if (!sprites[n].visible()) continue;
 
-        fl_push_matrix();
-        fl_translate(sprites[n].x, sprites[n].y);
-        fl_rotate(180/M_PI*sprites[n].a);
-        fl_color(sprites[n].col);
-        fl_begin_polygon();
-        fl_vertex( -9,  7);
-        fl_vertex(  9,  0);
-        fl_vertex( -9, -7);
-        fl_end_polygon();
-        fl_pop_matrix();
+        if (sprites[n].type == Sprite::ARROW)
+        {
+            fl_push_matrix();
+            fl_translate(x() + sprites[n].x, y() + sprites[n].y);
+            fl_rotate(180/M_PI*sprites[n].a);
+            fl_color(sprites[n].col);
+            fl_begin_polygon();
+            fl_vertex( -9,  7);
+            fl_vertex(  9,  0);
+            fl_vertex( -9, -7);
+            fl_end_polygon();
+            fl_pop_matrix();
+        }
 
-        fl_font(FL_HELVETICA, 12);
-        fl_color(FL_WHITE);
-        fl_draw( sprites[n].label.c_str(),
-                 sprites[n].x, sprites[n].y + 12, 0, 12,
-                 FL_ALIGN_CENTER );
+        if (sprites[n].type == Sprite::DOT)
+        {
+            int r = ceil(0.003*this->w());
+            int ix = x() + sprites[n].x - r;
+            int iy = x() + sprites[n].y - r;
+            int iw = 2*r + 1;
+            int ih = 2*r + 1;
+
+            fl_color(sprites[n].col);
+            fl_pie(ix, iy, iw, ih, 0, 360);
+        }
+
+        if (!sprites[n].label.empty())
+        {
+            /* FIXME: this allows symbols in names :/ */
+            fl_font(FL_HELVETICA, 12);
+            fl_color(FL_WHITE);
+            fl_draw( sprites[n].label.c_str(),
+                     sprites[n].x, sprites[n].y + 12, 0, 12,
+                     FL_ALIGN_CENTER );
+        }
     }
 
     fl_pop_clip();
@@ -76,7 +95,7 @@ void GameView::dot(double x, double y, Fl_Color c)
 void GameView::line(double x1, double y1, double x2, double y2, Fl_Color c)
 {
     double dx = (x2 - x1)/4, dy = (y2 - y1)/4;
-    for (int n = 0; n < 4; ++n)
+    for (int n = 0; n < 5; ++n)
     {
         dot(x1, y1, c);
         x1 += dx;
@@ -88,39 +107,36 @@ void GameView::damageSprite(int n)
 {
     damage(1, sprites[n].x - 24, sprites[n].y - 12, 48, 36);
 
-    int text_width = 12*sprites[n].label.size();
-    damage(1, sprites[n].x - text_width/2, sprites[n].y - 12, text_width, 40);
+    if (!sprites[n].label.empty())
+    {
+        /* FIXME: calculate this more accurately */
+        int text_width = 12*sprites[n].label.size();
+        damage(1, sprites[n].x - text_width/2, sprites[n].y - 12,
+                  text_width, 40);
+    }
 }
 
-void GameView::setSprite( int n, int x, int y, double a,
-                          Fl_Color col, const std::string &label )
+void GameView::setSprite(int n, double x, double y, double a, Fl_Color col)
 {
     assert(n >= 0 && (size_t)n < sprites.size());
-    if (sprites[n].visible) damageSprite(n);
-    sprites[n].x = x;
-    sprites[n].y = y;
+    if (sprites[n].visible()) damageSprite(n);
+    sprites[n].x = (int)(this->w()*x);
+    sprites[n].y = (int)(this->h()*(1.0 - y)) - 1;
     sprites[n].a = a;
     sprites[n].col = col;
+    if (sprites[n].visible()) damageSprite(n);
+}
+
+void GameView::setSpriteType(int n, Sprite::SpriteType type)
+{
+    if (sprites[n].visible()) damageSprite(n);
+    sprites[n].type = type;
+    if (sprites[n].visible()) damageSprite(n);
+}
+
+void GameView::setSpriteLabel(int n, const std::string &label)
+{
+    if (sprites[n].visible()) damageSprite(n);
     sprites[n].label = label;
-    if (sprites[n].visible) damageSprite(n);
-}
-
-void GameView::showSprite(int n)
-{
-    assert(n >= 0 && (size_t)n < sprites.size());
-    if (!sprites[n].visible)
-    {
-        sprites[n].visible = true;
-        damageSprite(n);
-    }
-}
-
-void GameView::hideSprite(int n)
-{
-    assert(n >= 0 && (size_t)n < sprites.size());
-    if (sprites[n].visible)
-    {
-        sprites[n].visible = false;
-        damageSprite(n);
-    }
+    if (sprites[n].visible()) damageSprite(n);
 }

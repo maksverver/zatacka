@@ -6,9 +6,13 @@
 
 struct Sprite
 {
-    Sprite() : visible(), x(), y(), a() { };
+    enum SpriteType { HIDDEN, ARROW, DOT };
 
-    bool visible;
+    Sprite() : type(HIDDEN), x(), y(), a() { };
+
+    bool visible() const { return type != HIDDEN; }
+
+    SpriteType type;
     int x, y;
     double a;
     Fl_Color col;
@@ -24,10 +28,9 @@ public:
     void dot(double x, double y, Fl_Color c);
     void line(double x1, double y1, double x2, double y2, Fl_Color c);
 
-    void setSprite( int n, int x, int y, double a,
-                    Fl_Color col, const std::string &label );
-    void showSprite(int n);
-    void hideSprite(int n);
+    void setSprite(int n, double x, double y, double a, Fl_Color col);
+    void setSpriteType(int n, Sprite::SpriteType);
+    void setSpriteLabel(int n, const std::string &label );
 
 protected:
     void useOffscreen();

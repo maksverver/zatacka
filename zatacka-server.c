@@ -31,6 +31,9 @@
 #define MOVE_RATE              (5)
 #define VICTORY_TIME           (3)
 #define SCORE_HISTORY         (10)
+#define HOLE_PROBABILITY     (100)
+#define HOLE_LENGTH_MIN        (3)
+#define HOLE_LENGTH_MAX        (9)
 
 #define WARMUP              (SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
@@ -61,6 +64,14 @@ typedef struct Player
     int             score_total;
     int             score_moving_sum;
     int             score_history[SCORE_HISTORY];
+
+    /* Hole creation */
+    int             hole, prev_hole;
+
+    /* Multiply-with-carry RNG for this player
+       (used to determine random state transitions) */
+    unsigned        rng_base;       /* base (current) value */
+    unsigned        rng_carry;      /* last carry value */
 } Player;
 
 
@@ -471,15 +482,10 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
         for (int n = MOVE_BACKLOG - added; n < MOVE_BACKLOG; ++n)
         {
-            if (pl->dead_since != -1)
-            {
-                pl->moves[n] = 4;
-                ++pl->timestamp;
-                continue;
-            }
+            if (pl->dead_since != -1) pl->moves[n] = 4;
 
             int m = pl->moves[n];
-            if (m < 1 || m > 3)
+            if (m < 1 || m > 4)
             {
                 error("received invalid move %d\n", m);
                 player_kill(pl);
@@ -487,29 +493,48 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             else
             if (pl->dead_since == -1)
             {
+                if (pl->hole == -1 && pl->rng_base%HOLE_PROBABILITY == 0)
+                {
+                    pl->hole = HOLE_LENGTH_MIN +
+                               (pl->rng_base/HOLE_PROBABILITY)
+                               % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
+                }
+
                 if (m == 2) pl->a += 2.0*M_PI/TURN_RATE;
                 if (m == 3) pl->a -= 2.0*M_PI/TURN_RATE;
 
                 double v = velocity(pl->timestamp);
                 double nx = pl->x + v*1e-3*MOVE_RATE*cos(pl->a);
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
-
+                info("time=%d %d %d", pl->timestamp, pl->hole, pl->prev_hole);
                 /* First, blank out previous dot */
-                plot(pl->x, pl->y, 0);
+                if (pl->prev_hole <= 0) plot(pl->x, pl->y, 0);
 
                 /* Check for out-of-bounds or overlapping dots */
                 if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
-                    plot(nx, ny, pl->index + 1) != 0 )
+                     plot(nx, ny, pl->index + 1) != 0 )
                 {
                     player_kill(pl);
                 }
+
                 /* Redraw previous dot */
-                plot(pl->x, pl->y, pl->index + 1);
+                if (pl->prev_hole <= 0) plot(pl->x, pl->y, pl->index + 1);
+
+                if (pl->hole > 0) plot(nx, ny, 0);
 
                 pl->x = nx;
                 pl->y = ny;
+
+                pl->prev_hole = pl->hole;
+                if (pl->hole >= 0) --pl->hole;
             }
+
             ++pl->timestamp;
+
+            unsigned long long rng_next = pl->rng_base*1967773755ull
+                                        + pl->rng_carry;
+            pl->rng_base  = rng_next&0xffffffff;
+            pl->rng_carry = rng_next>>32;
         }
         assert(pl->timestamp == timestamp);
     }
@@ -624,6 +649,13 @@ static void restart_game()
 
     info("Starting game with %d players", g_num_players);
 
+    g_num_alive = g_num_players;
+
+    g_gameid = ((rand()&255) << 24) |
+               ((rand()&255) << 16) |
+               ((rand()&255) <<  8) |
+               ((rand()&255) <<  0);
+
     /* Initialize players */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -637,14 +669,11 @@ static void restart_game()
         pl->a = 2.0*M_PI*rand()/RAND_MAX;
         pl->timestamp = 0;
         memset(pl->moves, 0, sizeof(pl->moves));
+        pl->hole      = -1;
+        pl->prev_hole = -1;
+        pl->rng_base  = g_gameid ^ n;
+        pl->rng_carry = 0;
     }
-
-    g_num_alive = g_num_players;
-
-    g_gameid = ((rand()&255) << 24) |
-               ((rand()&255) << 16) |
-               ((rand()&255) <<  8) |
-               ((rand()&255) <<  0);
 
     /* Build start game packet */
     unsigned char packet[MAX_PACKET_LEN];
@@ -654,12 +683,18 @@ static void restart_game()
     packet[pos++] = TURN_RATE;
     packet[pos++] = MOVE_RATE;
     packet[pos++] = WARMUP;
+    packet[pos++] = SCORE_HISTORY;
+    packet[pos++] = (HOLE_PROBABILITY >> 8)&255;
+    packet[pos++] = (HOLE_PROBABILITY >> 0)&255;
+    packet[pos++] = HOLE_LENGTH_MIN;
+    packet[pos++] = HOLE_LENGTH_MAX - HOLE_LENGTH_MIN;
     packet[pos++] = MOVE_BACKLOG;
     packet[pos++] = g_num_players;
     packet[pos++] = (g_gameid>>24)&255;
     packet[pos++] = (g_gameid>>16)&255;
     packet[pos++] = (g_gameid>> 8)&255;
     packet[pos++] = (g_gameid>> 0)&255;
+    assert(pos == 16);
     /* FIXME: possible buffer overflow here, depending on server parameters */
     for (int i = 0; i < g_num_players; ++i)
     {
