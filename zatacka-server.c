@@ -862,30 +862,29 @@ static void do_frame()
     client_broadcast(packet, pos, false);
 }
 
-static int run()
+/* Processes frames until the server is up to date, and returns the
+   number of seconds until the next frame must be processed. */
+static double process_frames()
 {
     for (;;)
     {
         /* Compute time to next tick */
         double delay = (double)g_timestamp/SERVER_FPS - time_now();
-        if (delay <= 0)
-        {
-            do_frame();
-            delay += (double)1/SERVER_FPS;
-            g_timestamp += 1;
-        }
+        if (delay > 0) return delay;
+        g_timestamp += 1;
+        do_frame();
+    }
+}
 
+static int run()
+{
+    for (;;)
+    {
         /* Calculcate select time-out */
         struct timeval timeout;
-        if (delay <= 0)
-        {
-            timeout.tv_sec = timeout.tv_usec = 0;
-        }
-        else
-        {
-            timeout.tv_sec  = (int)delay;
-            timeout.tv_usec = (int)(1e6*(delay - timeout.tv_sec));
-        }
+        double delay = process_frames();
+        timeout.tv_sec  = (int)floor(delay);
+        timeout.tv_usec = (int)(1e6*(delay - floor(delay)));
 
         /* Prepare file selectors to select on */
         fd_set readfds;
@@ -949,6 +948,9 @@ static int run()
                 }
             }
         }
+
+        /* Ensure server is still up to date */
+        process_frames();
 
         /* Accept incoming packets */
         if (FD_ISSET(g_fd_packet, &readfds))
