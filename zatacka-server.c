@@ -22,17 +22,17 @@
 #endif
 
 #define MAX_CLIENTS           (64)
-#define SERVER_FPS            (40)
+#define SERVER_FPS            (30)
 #define MOVE_BACKLOG          (20)
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
 #define TURN_RATE             (72)
-#define MOVE_RATE              (5)
+#define MOVE_RATE              (7)
 #define SCORE_HISTORY         (10)
-#define HOLE_PROBABILITY     (100)
-#define HOLE_LENGTH_MIN        (3)
-#define HOLE_LENGTH_MAX        (9)
+#define HOLE_PROBABILITY      (80)
+#define HOLE_LENGTH_MIN        (2)
+#define HOLE_LENGTH_MAX        (8)
 
 #define VICTORY_TIME        (3*SERVER_FPS)
 #define WARMUP              (3*SERVER_FPS)
@@ -99,6 +99,7 @@ typedef struct Client
 static int g_fd_listen;         /* Stream data listening socket */
 static int g_fd_packet;         /* Packet data socket */
 static int g_timestamp;         /* Time counter */
+static double g_time_start;     /* Time since at last game restart */
 static int g_deadline;          /* Game ends at this time */
 static int g_num_clients;       /* Number of connected clients */
 static int g_num_players;       /* Number of people in the current game */
@@ -463,7 +464,8 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     int timestamp = (buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | buf[8];
     if (timestamp > g_timestamp + 1)
     {
-        error("(MOVE) timestamp too great");
+        error( "(MOVE) timestamp too great (received: %d; expected %d)",
+                timestamp, g_timestamp + 1 );
         return;
     }
 
@@ -657,9 +659,9 @@ static void debug_dump_image()
 
 static void restart_game()
 {
+    g_time_start = time_now();
     g_timestamp = 0;
     g_deadline = -1;
-    time_reset();
 
     if (g_num_clients == 0) return;
     if (g_num_players > 0) debug_dump_image();
@@ -770,6 +772,9 @@ static void restart_game()
     /* Send start packet to all clients */
     client_broadcast(packet, pos, true);
     send_scores();
+
+    /* Reset timer (important!) */
+    time_reset();
 }
 
 static void send_scores()
@@ -866,14 +871,14 @@ static void do_frame()
    number of seconds until the next frame must be processed. */
 static double process_frames()
 {
-    for (;;)
-    {
+    do {
         /* Compute time to next tick */
-        double delay = (double)g_timestamp/SERVER_FPS - time_now();
+        double delay = (double)(g_timestamp + 1)/SERVER_FPS - time_now();
         if (delay > 0) return delay;
         g_timestamp += 1;
         do_frame();
-    }
+    } while (g_num_players > 0);
+    return 1.0;
 }
 
 static int run()
@@ -936,7 +941,7 @@ static int run()
                 }
                 else
                 {
-                    info( "Accepted client from %s:%d in slot #%d",
+                    info( "accepted client from %s:%d in slot #%d",
                           inet_ntoa(sa.sin_addr), ntohs(sa.sin_port), n );
 
                     /* Initialize new client slot */

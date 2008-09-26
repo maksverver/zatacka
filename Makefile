@@ -1,5 +1,5 @@
 FLTKC=fltk/bin/fltk-config
-CFLAGS=-g -Wall -Wextra -std=c99
+CFLAGS=-g -Wall -Wextra -std=c99 -O2
 CXXFLAGS=-g -Wall -Wextra -ansi `$(FLTKC) --cxxflags`
 LDFLAGS=`$(FLTKC) --ldstaticflags`
 OBJS=ClientSocket.o Config.o Debug.o GameModel.o GameView.o ScoreView.o
