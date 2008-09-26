@@ -615,15 +615,18 @@ int main(int argc, char *argv[])
 
     /* Configuration */
     Config cfg;
-    if (!cfg.show_window()) return 0;
+    do {
+        if (!cfg.show_window()) return 0;
 
-    /* Connect to the server */
-    g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
-    if (!g_cs->connected())
-    {
-        error("Couldn't connect to server.");
-        return 1;
-    }
+        /* Try to connect to the server */
+        g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
+        if (!g_cs->connected())
+        {
+            fl_alert( "The network connection could not be established!\n"
+                      "Please check the specified host name (%s) and port (%d)",
+                      cfg.hostname().c_str(), cfg.port() );
+        }
+    } while (!g_cs->connected());
 
     /* Set-up names */
     for (int n = 0; n < cfg.players(); ++n)
