@@ -1,3 +1,4 @@
+#define DEBUG_BMP
 #include "common.h"
 #include "Config.h"
 #include "Debug.h"
@@ -11,6 +12,12 @@
 #include <string>
 #include <math.h>
 #include <string.h>
+
+#ifdef DEBUG_BMP
+void debug_dump_image(unsigned id);
+void debug_plot(double x, double y, int col);
+void debug_reset_image();
+#endif
 
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
@@ -47,31 +54,6 @@ struct ChatLine
     std::string text;
 };
 
-/* Global variables*/
-Fl_Window *g_window;    /* main window */
-MainGameView *g_gv;     /* graphical game view */
-ScoreView *g_sv;        /* score view */
-char g_gameid_text[64]; /* game id label text */
-Fl_Box *g_gameid_box;   /* box displaying the current game id in its label */
-ClientSocket *g_cs;     /* client connection to the server */
-
-unsigned g_gameid;      /* current game id */
-int g_last_timestamp;   /* last timestamp received */
-int g_data_rate;        /* moves per second (currently also display FPS) */
-int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
-int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
-int g_warmup;           /* number of turns to wait before moving forward */
-int g_score_rounds;     /* number of rounds for the moving average score */
-int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
-int g_hole_length_min;  /* minimum length of a hole (in turns) */
-int g_hole_length_max;  /* maximum length of a hole (in turns) */
-int g_move_backlog;     /* number of moves to cache and send/receive */
-int g_num_players;      /* number of players in the game == g_players.size() */
-
-bool g_am_typing;                   /* am I typing a message? */
-std::string g_my_chat_text;         /* current line */
-std::vector<ChatLine> g_chat_lines; /* previous lines */
-
 class KeyBindings
 {
 public:
@@ -84,11 +66,39 @@ private:
     int keys[2];
 };
 
+/* Global variables*/
+Fl_Window *g_window;    /* main window */
+MainGameView *g_gv;     /* graphical game view */
+ScoreView *g_sv;        /* score view */
+char g_gameid_text[64]; /* game id label text */
+Fl_Box *g_gameid_box;   /* box displaying the current game id in its label */
+ClientSocket *g_cs;     /* client connection to the server */
+
+unsigned g_gameid;      /* current game id */
+int g_last_timestamp;   /* last timestamp received */
+int g_local_timestamp;  /* local estimated timestamp */
+double g_server_time;   /* estimated server time at timestamp 0 */
+int g_data_rate;        /* moves per second */
+int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
+int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
+int g_warmup;           /* number of turns to wait before moving forward */
+int g_score_rounds;     /* number of rounds for the moving average score */
+int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
+int g_hole_length_min;  /* minimum length of a hole (in turns) */
+int g_hole_length_max;  /* maximum length of a hole (in turns) */
+int g_move_backlog;     /* number of moves to cache and send/receive */
+int g_num_players;      /* number of players in the game == g_players.size() */
+
 std::vector<std::string> g_my_names;    /* my player names */
 std::vector<KeyBindings> g_my_keys;     /* my player keys */
 std::vector<std::string> g_my_moves;    /* my recent moves (each g_move_backlog long) */
+std::vector<int>         g_my_players;  /* indices of my players in g_players */
 
 std::vector<Player> g_players;  /* all players in the game */
+
+bool g_am_typing;                   /* am I typing a message? */
+std::string g_my_chat_text;         /* current line */
+std::vector<ChatLine> g_chat_lines; /* previous lines */
 
 static void handle_MESG(unsigned char *buf, size_t len)
 {
@@ -139,6 +149,9 @@ static void handle_STRT(unsigned char *buf, size_t len)
         return;
     }
 
+#ifdef DEBUG_BMP
+    if (g_gameid != 0) debug_dump_image(g_gameid);
+#endif
 
     /* Read game parameters */
     size_t pos = 1;
@@ -161,9 +174,14 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     info("Restarting game with %d players", g_num_players);
     g_last_timestamp = -1;
+    g_local_timestamp = 0;
     g_players = std::vector<Player>(g_num_players);
     g_my_moves = std::vector<std::string> (
         g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
+    g_my_players = std::vector<int>(g_my_names.size(), -1);
+#ifdef DEBUG_BMP
+    debug_reset_image();
+#endif
 
     /* FIXME: read outside of buffer here, if the packet is not correctly formatted! */
     for (int n = 0; n < g_num_players; ++n)
@@ -185,6 +203,15 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_players[n].timestamp = 0;
         g_players[n].rng_base  = n^g_gameid;
         g_players[n].rng_carry = 0;
+
+        for (int m = 0; m < (int)g_my_names.size(); ++m)
+        {
+            if (g_my_names[m] == g_players[n].name)
+            {
+                g_my_players[m] = n;
+                break;
+            }
+        }
     }
     assert((size_t)pos == len);
 
@@ -233,48 +260,152 @@ static void handle_SCOR(unsigned char *buf, size_t len)
     g_sv->update(g_players);
 }
 
-
-static void player_turn(int n, int dir)
+static void player_advance(int n, int turn_dir)
 {
-    g_players[n].a += dir*2.0*M_PI/g_turn_rate;
-}
+    Player &pl = g_players[n];
 
-static double velocity(int t)
-{
-    return t < g_warmup ? 0.0 : 1.0;
-}
-
-static void player_advance(int n)
-{
-    double v = velocity(g_players[n].timestamp);
-    if (v == 0) return;
-    double nx = g_players[n].x + v*1e-3*g_move_rate*cos(g_players[n].a);
-    double ny = g_players[n].y + v*1e-3*g_move_rate*sin(g_players[n].a);
-    if (g_players[n].hole == -1)
+    /* Change sprite after warmup period ends */
+    if (pl.timestamp == g_warmup)
     {
-        g_gv->line(g_players[n].x, g_players[n].y, nx, ny, g_players[n].col);
+        g_gv->setSpriteLabel(n, std::string());
+        g_gv->setSpriteType(n, Sprite::DOT);
     }
-    g_players[n].x = nx;
-    g_players[n].y = ny;
+
+    /* Change hole making state according to RNG */
+    if (pl.hole == -1 && pl.rng_base%g_hole_probability == 0)
+    {
+        pl.hole = g_hole_length_min +
+                 pl.rng_base/g_hole_probability %
+                 (g_hole_length_max - g_hole_length_min + 1);
+    }
+
+    /* First turn */
+    pl.a += turn_dir*2.0*M_PI/g_turn_rate;
+
+    /* Then move ahead */
+    if (pl.timestamp >= g_warmup)
+    {
+        double nx = pl.x + 1e-3*g_move_rate*cos(pl.a);
+        double ny = pl.y + 1e-3*g_move_rate*sin(pl.a);
+        if (pl.hole == -1)
+        {
+            g_gv->line(pl.x, pl.y, nx, ny, pl.col);
+        }
+#ifdef DEBUG_BMP
+        if (pl.hole <= 0) debug_plot(pl.x, pl.y, n + 1);
+#endif
+        pl.x = nx;
+        pl.y = ny;
+    }
+
+    /* Update RNG */
+    unsigned long long rng_next = pl.rng_base*1967773755ull + pl.rng_carry;
+    pl.rng_base  = rng_next&0xffffffff;
+    pl.rng_carry = rng_next>>32;
+
+    /* Count down hole */
+    if (pl.hole >= 0) --pl.hole;
+
+    /* Increment player timestamp */
+    pl.timestamp++;
+}
+
+static void player_move(int n, int move)
+{
+    Player &pl = g_players[n];
+
+    switch (move)
+    {
+    case 0: break; /* empty */
+    default: error("invalid move (%d) interpreted as 1", (int)move);
+        /* falls through */
+    case 1: player_advance(n,  0); break;  /* move ahead */
+    case 2: player_advance(n, +1); break;  /* turn left */
+    case 3: player_advance(n, -1); break;  /* turn right */
+    case 4:                                     /* dead */
+        if (!pl.dead)
+        {
+            pl.dead = true;
+            g_gv->setSpriteType(n, Sprite::HIDDEN);
+        }
+        break;
+    }
+
+    /* Update sprite */
+    g_gv->setSprite(n, pl.x, pl.y, pl.a, pl.col);
+
 }
 
 static void forward_to(int timestamp)
 {
-    assert(timestamp > g_last_timestamp);
-    int delay = timestamp - g_last_timestamp;
+    if (timestamp <= g_local_timestamp) return;
+
+    int delay = timestamp - g_local_timestamp;
     for (size_t n = 0; n < g_my_moves.size(); ++n)
     {
+        int p = g_my_players[n];
+        if (p < 0) continue;
+        Player &pl = g_players[p];
+
         std::string &moves = g_my_moves[n];
         std::rotate(moves.begin(), moves.begin() + delay, moves.end());
-        unsigned char m = 1;
-        if (Fl::event_key(g_my_keys[n][0]) && !Fl::event_key(g_my_keys[n][1])) m = 2;
-        if (Fl::event_key(g_my_keys[n][1]) && !Fl::event_key(g_my_keys[n][0])) m = 3;
+
+        unsigned char m;
+        if (Fl::event_key(g_my_keys[n][0]) && !Fl::event_key(g_my_keys[n][1]))
+        {
+            m = 2;
+        }
+        else
+        if (Fl::event_key(g_my_keys[n][1]) && !Fl::event_key(g_my_keys[n][0]))
+        {
+            m = 3;
+        }
+        else
+        {
+            m = 1;
+        }
+
+        /* Fill in new moves */
         for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos)
         {
             moves[pos] = m;
         }
+
+        if (pl.dead) continue;
+
+        /* Simulate cached moves locally, to ensure smooth gameplay, even when
+           packet loss is high. The last move is held back to prevent rendering
+           glitches when no packetloss occurs. */
+        #if 0
+        for ( int pos = g_move_backlog - timestamp + pl.timestamp;
+              pos < g_move_backlog - 1; ++pos)
+        {
+            player_move(p,  moves[pos]);
+        }
+        #endif
     }
-    g_last_timestamp = timestamp;
+    g_local_timestamp = timestamp;
+
+    /* Send new move packet */
+    {
+        char packet[4096];
+        size_t pos = 0;
+        packet[pos++] = MUCS_MOVE;
+        packet[pos++] = (g_gameid >> 24)&255;
+        packet[pos++] = (g_gameid >> 16)&255;
+        packet[pos++] = (g_gameid >>  8)&255;
+        packet[pos++] = (g_gameid >>  0)&255;
+        packet[pos++] = (g_local_timestamp >> 24)&255;
+        packet[pos++] = (g_local_timestamp >> 16)&255;
+        packet[pos++] = (g_local_timestamp >>  8)&255;
+        packet[pos++] = (g_local_timestamp >>  0)&255;
+        for (size_t n = 0; n < g_my_moves.size(); ++n)
+        {
+            memcpy(packet + pos, g_my_moves[n].data(), g_move_backlog);
+            pos += g_move_backlog;
+        }
+        g_cs->write(packet, pos, false);
+    }
 }
 
 static void handle_MOVE(unsigned char *buf, size_t len)
@@ -304,8 +435,14 @@ static void handle_MOVE(unsigned char *buf, size_t len)
 
     if (timestamp - g_last_timestamp >= g_move_backlog)
     {
-        fatal("(MOVE) out of sync! (%d >> %d)\n", timestamp, g_last_timestamp);
+        fatal("(MOVE) out of sync!");
         return;
+    }
+
+    /* Update estimated server time (at start of the round) */
+    {
+        double t = time_now() - 1.0*timestamp/g_data_rate;
+        if (g_last_timestamp == -1 || t < g_server_time) g_server_time = t;
     }
 
     /* Update alive/dead status */
@@ -318,87 +455,16 @@ static void handle_MOVE(unsigned char *buf, size_t len)
     /* Update moves */
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n].dead) continue;
-
         for (int t = timestamp - g_move_backlog; t < timestamp; ++t)
         {
-            unsigned char m = buf[pos++];
+            unsigned char m = g_players[n].dead ? 4 : buf[pos++];
             if (t < g_players[n].timestamp) continue;
-
-            /* If move not yet known; skip. All other moves must be 0 too! */
-            if (m == 0) continue;
-
-            if ( g_players[n].hole == -1 &&
-                 g_players[n].rng_base%g_hole_probability == 0)
-            {
-                g_players[n].hole = g_hole_length_min +
-                    g_players[n].rng_base/g_hole_probability%
-                    (g_hole_length_max - g_hole_length_min + 1);
-            }
-
-            switch (m)
-            {
-            default:
-                error("invalid move (%d) interpreted as 1 %d", (int)m, t);
-                /* falls through */
-            case 1: /* ahead */
-                player_advance(n);
-                break;
-
-            case 2: /* left */
-                player_turn(n, +1);
-                player_advance(n);
-                break;
-
-            case 3: /* right */
-                player_turn(n, -1);
-                player_advance(n);
-                break;
-
-            case 4: /* dead */
-                g_gv->setSpriteType(n, Sprite::HIDDEN);
-                break;
-            }
-
-            if (g_players[n].hole >= 0) --g_players[n].hole;
-            g_players[n].timestamp++;
-
-            unsigned long long rng_next = g_players[n].rng_base*1967773755ull
-                                        + g_players[n].rng_carry;
-            g_players[n].rng_base  = rng_next&0xffffffff;
-            g_players[n].rng_carry = rng_next>>32;
-        }
-
-        g_gv->setSprite( n, g_players[n].x, g_players[n].y,
-                            g_players[n].a, g_players[n].col );
-        if (timestamp == g_warmup)
-        {
-            g_gv->setSpriteLabel(n, std::string());
-            g_gv->setSpriteType(n, Sprite::DOT);
+            /* at this point, t == g_players[n].timestamp */
+            player_move(n, m);
         }
     }
 
-    forward_to(timestamp + 1);
-
-    {
-        char packet[4096];
-        size_t pos = 0;
-        packet[pos++] = MUCS_MOVE;
-        packet[pos++] = (g_gameid >> 24)&255;
-        packet[pos++] = (g_gameid >> 16)&255;
-        packet[pos++] = (g_gameid >>  8)&255;
-        packet[pos++] = (g_gameid >>  0)&255;
-        packet[pos++] = (g_last_timestamp >> 24)&255;
-        packet[pos++] = (g_last_timestamp >> 16)&255;
-        packet[pos++] = (g_last_timestamp >>  8)&255;
-        packet[pos++] = (g_last_timestamp >>  0)&255;
-        for (size_t n = 0; n < g_my_moves.size(); ++n)
-        {
-            memcpy(packet + pos, g_my_moves[n].data(), g_move_backlog);
-            pos += g_move_backlog;
-        }
-        g_cs->write(packet, pos, false);
-    }
+    g_last_timestamp = timestamp;
 }
 
 static void handle_packet(unsigned char *buf, size_t len)
@@ -431,11 +497,18 @@ void callback(void *arg)
     if (len < 0) error("socket read failed");
 
     /* Do timed events: */
-    double t =  time_now();
+    double t = time_now();
     while (!g_chat_lines.empty() && g_chat_lines.front().time < t - 8)
     {
         g_chat_lines.erase(g_chat_lines.begin());
         g_gv->damageChatText();
+    }
+
+    if (g_last_timestamp >= 0)
+    {
+        /* Estimate server timestamp */
+        int server_timestamp = floor((t - g_server_time)*g_data_rate);
+        forward_to(server_timestamp + 1);
     }
 
     Fl::repeat_timeout(1.0/CLIENT_FPS, callback, arg);
@@ -585,6 +658,18 @@ void MainGameView::damageChatText()
 void MainGameView::draw()
 {
     GameView::draw();
+
+    if (g_gameid == 0)
+    {
+        fl_font(FL_HELVETICA, 24);
+        fl_color(FL_WHITE);
+        fl_draw( "Succesfully connected to server!\n"
+                 "Please wait for the next round to start.",
+                 x(), y(), w(), h(), FL_ALIGN_CENTER );
+        return;
+    }
+
+
     fl_font(FL_HELVETICA, 14);
 
     int x = this->x() + 8, y = this->y() + h() - 8;
@@ -628,6 +713,9 @@ int main(int argc, char *argv[])
         }
     } while (!g_cs->connected());
 
+    /* Create window */
+    create_main_window(cfg.width(), cfg.height(), cfg.fullscreen());
+
     /* Set-up names */
     for (int n = 0; n < cfg.players(); ++n)
     {
@@ -652,11 +740,8 @@ int main(int argc, char *argv[])
         g_cs->write(packet, pos, true);
     }
 
-    /* Create window */
-    create_main_window(cfg.width(), cfg.height(), cfg.fullscreen());
-
     /* FIXME: should wait for window to be visible */
-    Fl::add_timeout(0.25, callback, NULL);
+    Fl::add_timeout(0.3, callback, NULL);
     Fl::run();
     disconnect();
     return 0;

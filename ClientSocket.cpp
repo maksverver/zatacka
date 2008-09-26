@@ -26,7 +26,7 @@ typedef int socklen_t;
 
 /* For debugging: simulated probability of packet loss (between 0 and 1)
                   (applies only to unreliable packet data) */
-static double g_packetloss = 0;
+static double g_packetloss = 0.5;
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
@@ -161,8 +161,9 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
         }
     }
     else
-    if (g_packetloss == 0 || rand() > RAND_MAX*g_packetloss)
     {
+        /* Randomly drop outgoing packet */
+        if (g_packetloss != 0 && rand() < RAND_MAX*g_packetloss) return;
 
         if (send(fd_packet, buf, len, 0) != (ssize_t)len)
         {
@@ -205,8 +206,10 @@ ssize_t ClientSocket::next_stream_packet(void *buf, size_t buf_len)
 ssize_t ClientSocket::read(void *buf, size_t buf_len)
 {
     /* First, check if we have a buffered packet available */
-    ssize_t res = next_stream_packet(buf, buf_len);
-    if (res != 0) return res;
+    {
+        ssize_t res = next_stream_packet(buf, buf_len);
+        if (res != 0) return res;
+    }
 
     /* Try to read a packet from a socket */
     timeval tv = { 0, 0 };
@@ -232,13 +235,18 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
                                       sizeof(stream_buf) - stream_pos, 0);
         if (len < 0) return len; /* read failed */
         stream_pos += len;
-        res = next_stream_packet(buf, buf_len);
+        ssize_t res = next_stream_packet(buf, buf_len);
         if (res != 0) return res;
     }
 
     if (FD_ISSET(fd_packet, &readfds))
     {
-        return recv(fd_packet, buf, buf_len, 0);
+        ssize_t res = recv(fd_packet, buf, buf_len, 0);
+
+        /* Randomly drop incoming packet */
+        if (g_packetloss != 0 && rand() < RAND_MAX*g_packetloss) res = 0;
+
+        if (res != 0) return res;
     }
 
     return 0;
