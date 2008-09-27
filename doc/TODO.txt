@@ -10,6 +10,9 @@ Client:
  - (re)store last-used configuration settings
 
 Server:
+ - use FIONBIO to set sockets to non-blocking (MSG_DONTWAIT doesn't work
+   on Windows)
+
  Potential bug:
   - When a client is disconnected, it may have players active, which are pointed
     to by the g_players array. If a new client connects, the active player

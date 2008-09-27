@@ -15,12 +15,18 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#ifndef WIN32
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#else
+#include <winsock2.h>
+#define MSG_DONTWAIT 0
+typedef int socklen_t;
+#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1014,6 +1020,15 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
 
+#ifdef WIN32
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0)
+    {
+        fatal("WSAStartup failed!");
+    }
+#endif
+
+#ifndef WIN32
     /* Mask SIGPIPE, so failed writes do not kill the server */
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;
@@ -1027,6 +1042,7 @@ int main(int argc, char *argv[])
     {
         error("could not change core dump size!");
     }
+#endif
 
     struct sockaddr_in sa_local;
     sa_local.sin_family = AF_INET;
