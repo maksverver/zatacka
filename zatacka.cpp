@@ -100,6 +100,27 @@ bool g_am_typing;                   /* am I typing a message? */
 std::string g_my_chat_text;         /* current line */
 std::vector<ChatLine> g_chat_lines; /* previous lines */
 
+static void append_message(const std::string &text, Fl_Color col = FL_WHITE)
+{
+    if (!g_chat_lines.empty() && g_chat_lines.back().text == text)
+    {
+        /* Don't duplicate messages */
+        g_chat_lines.back().time = time_now();
+        return;
+    }
+
+    ChatLine cl;
+    cl.time  = time_now();
+    cl.color = col;
+    cl.text  = text;
+    g_chat_lines.push_back(cl);
+
+    /* Only show the few latest messages */
+    while (g_chat_lines.size() > 5) g_chat_lines.erase(g_chat_lines.begin());
+
+    g_gv->damageChatText();
+}
+
 static void handle_MESG(unsigned char *buf, size_t len)
 {
     if (len < 2) return;
@@ -113,23 +134,26 @@ static void handle_MESG(unsigned char *buf, size_t len)
 
     std::string name((char*)buf + 2, name_len);
     std::string text((char*)buf + 2 + name_len, len - 2 - name_len);
-    Fl_Color color = FL_WHITE;
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        if (g_players[n].name == name)
-        {
-            color = g_players[n].col;
-            break;
-        }
-    }
 
-    ChatLine cl;
-    cl.time  = time_now();
-    cl.color = color;
-    cl.text  = name + ": " + text;
-    g_chat_lines.push_back(cl);
-    while (g_chat_lines.size() > 5) g_chat_lines.erase(g_chat_lines.begin());
-    g_gv->damageChatText();
+    if (name.empty())
+    {
+        /* Show server message */
+        append_message("(server) " + text);
+    }
+    else
+    {
+        /* Show player chat message */
+        Fl_Color col = fl_gray_ramp(FL_NUM_GRAY/2);
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            if (g_players[n].name == name)
+            {
+                col = g_players[n].col;
+                break;
+            }
+        }
+        append_message(name + ": " + text, col);
+    }
 }
 
 static void handle_DISC(unsigned char *buf, size_t len)
@@ -264,6 +288,31 @@ static void player_advance(int n, int turn_dir)
 {
     Player &pl = g_players[n];
 
+    /* First turn */
+    pl.a += turn_dir*2.0*M_PI/g_turn_rate;
+
+    /* Then move ahead */
+    if (pl.timestamp >= g_warmup)
+    {
+        double nx = pl.x + 1e-3*g_move_rate*cos(pl.a);
+        double ny = pl.y + 1e-3*g_move_rate*sin(pl.a);
+        if (pl.hole == -1)
+        {
+            g_gv->line(pl.x, pl.y, nx, ny, pl.col);
+        }
+#ifdef DEBUG_BMP
+        if (pl.hole <= 0) debug_plot(nx, ny, n + 1);
+#endif
+        pl.x = nx;
+        pl.y = ny;
+    }
+
+}
+
+static void player_move(int n, int move)
+{
+    Player &pl = g_players[n];
+
     /* Change sprite after warmup period ends */
     if (pl.timestamp == g_warmup)
     {
@@ -279,44 +328,9 @@ static void player_advance(int n, int turn_dir)
                  (g_hole_length_max - g_hole_length_min + 1);
     }
 
-    /* First turn */
-    pl.a += turn_dir*2.0*M_PI/g_turn_rate;
-
-    /* Then move ahead */
-    if (pl.timestamp >= g_warmup)
-    {
-        double nx = pl.x + 1e-3*g_move_rate*cos(pl.a);
-        double ny = pl.y + 1e-3*g_move_rate*sin(pl.a);
-        if (pl.hole == -1)
-        {
-            g_gv->line(pl.x, pl.y, nx, ny, pl.col);
-        }
-#ifdef DEBUG_BMP
-        if (pl.hole <= 0) debug_plot(pl.x, pl.y, n + 1);
-#endif
-        pl.x = nx;
-        pl.y = ny;
-    }
-
-    /* Update RNG */
-    unsigned long long rng_next = pl.rng_base*1967773755ull + pl.rng_carry;
-    pl.rng_base  = rng_next&0xffffffff;
-    pl.rng_carry = rng_next>>32;
-
-    /* Count down hole */
-    if (pl.hole >= 0) --pl.hole;
-
-    /* Increment player timestamp */
-    pl.timestamp++;
-}
-
-static void player_move(int n, int move)
-{
-    Player &pl = g_players[n];
-
     switch (move)
     {
-    case 0: break; /* empty */
+    case 0: fatal("0 move passed to player_move!"); return;
     default: error("invalid move (%d) interpreted as 1", (int)move);
         /* falls through */
     case 1: player_advance(n,  0); break;  /* move ahead */
@@ -330,6 +344,17 @@ static void player_move(int n, int move)
         }
         break;
     }
+
+    /* Update RNG */
+    unsigned long long rng_next = pl.rng_base*1967773755ull + pl.rng_carry;
+    pl.rng_base  = rng_next&0xffffffff;
+    pl.rng_carry = rng_next>>32;
+
+    /* Count down hole */
+    if (pl.hole >= 0) --pl.hole;
+
+    /* Increment player timestamp */
+    pl.timestamp++;
 
     /* Update sprite */
     g_gv->setSprite(n, pl.x, pl.y, pl.a, pl.col);
@@ -433,12 +458,6 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         return;
     }
 
-    if (timestamp - g_last_timestamp >= g_move_backlog)
-    {
-        fatal("(MOVE) out of sync!");
-        return;
-    }
-
     /* Update estimated server time (at start of the round) */
     {
         double t = time_now() - 1.0*timestamp/g_data_rate;
@@ -452,6 +471,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         g_players[n].dead = !buf[pos++];
     }
 
+    hex_dump(buf + pos, g_move_backlog);
     /* Update moves */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -459,7 +479,16 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         {
             unsigned char m = g_players[n].dead ? 4 : buf[pos++];
             if (t < g_players[n].timestamp) continue;
-            /* at this point, t == g_players[n].timestamp */
+            if (m == 0) break;
+            if (t > g_players[n].timestamp)
+            {
+                /* If this happens, the client is hosed!
+                   Results will be broken until the next game starts. */
+                error("(MOVE) out of sync!");
+                append_message("Client out-of-sync!");
+                g_players[n].dead = true;
+                break;
+            }
             player_move(n, m);
         }
     }

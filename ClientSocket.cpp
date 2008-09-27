@@ -61,12 +61,12 @@ ClientSocket::ClientSocket(const char *hostname, int port)
     static bool winsock_initialized = false;
     if (!winsock_initialized)
     {
-	WSADATA wsaData;
+        WSADATA wsaData;
         if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) 
         {
             fatal("WSAStartup failed!");
         }
-	winsock_initialized = true;
+        winsock_initialized = true;
     }
 #endif
 
