@@ -698,10 +698,10 @@ static void restart_game()
     packet[pos++] = (g_gameid>> 8)&255;
     packet[pos++] = (g_gameid>> 0)&255;
     assert(pos == 16);
-    /* FIXME: possible buffer overflow here, depending on server parameters */
     for (int i = 0; i < g_num_players; ++i)
     {
         Player *pl = g_players[i];
+        assert(pos + 10 < MAX_PACKET_LEN);
         packet[pos++] = pl->color.r;
         packet[pos++] = pl->color.g;
         packet[pos++] = pl->color.b;
@@ -716,6 +716,7 @@ static void restart_game()
         packet[pos++] = (a>>0)&255;
         size_t name_len = strlen(pl->name);
         packet[pos++] = name_len;
+        assert(pos + name_len < MAX_PACKET_LEN);
         memcpy(&packet[pos], pl->name, name_len);
         pos += name_len;
     }
@@ -777,7 +778,6 @@ static void do_frame()
 
     /* Send moves packet to all clients  */
     unsigned char packet[4096];
-    /* FIXME: possible buffer overflow here, depending on server parameters */
     size_t pos = 0;
     packet[pos++] = MUSC_MOVE;
     packet[pos++] = (g_gameid >> 24)&255;
@@ -788,6 +788,7 @@ static void do_frame()
     packet[pos++] = (g_timestamp >> 16)&255;
     packet[pos++] = (g_timestamp >>  8)&255;
     packet[pos++] = (g_timestamp >>  0)&255;
+    assert(pos + g_num_players < MAX_PACKET_LEN);
     for (int n = 0; n < g_num_players; ++n)
     {
         if (g_players[n]->dead_since != -1 &&
@@ -807,6 +808,7 @@ static void do_frame()
         {
             continue;
         }
+        assert(pos + MOVE_BACKLOG < MAX_PACKET_LEN);
         int backlog = g_timestamp - g_players[n]->timestamp;
         if (backlog > MOVE_BACKLOG) backlog = MOVE_BACKLOG;
         memcpy(packet + pos, g_players[n]->moves + backlog,

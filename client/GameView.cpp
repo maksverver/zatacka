@@ -108,10 +108,10 @@ void GameView::damageSprite(int n)
 
     if (!sprites[n].label.empty())
     {
-        /* FIXME: calculate this more accurately */
-        int text_width = 12*sprites[n].label.size();
-        damage(1, sprites[n].x - text_width/2, sprites[n].y - 12,
-                  text_width, 40);
+        int w = 0, h = 0;
+        fl_font(FL_HELVETICA, 12);
+        fl_measure(sprites[n].label.c_str(), w, h, 0);
+        damage(1, sprites[n].x - w/2, sprites[n].y + 12 - h, w, 2*h);
     }
 }
 

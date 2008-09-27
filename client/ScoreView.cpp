@@ -58,6 +58,16 @@ void ScoreView::update(std::vector<Player> &players)
         labels_score_cur.push_back(stringify(ordered_players[n]->score_cur));
         labels_score_tot.push_back(stringify(ordered_players[n]->score_tot));
         labels_score_avg.push_back(stringify(ordered_players[n]->score_avg));
+
+        /* HACK: Adjust name label so it fits in the box */
+        fl_font(FL_HELVETICA, 20);
+        while (!labels_name.back().empty())
+        {
+            int w = 0, h = 0;
+            fl_measure(labels_name.back().c_str(), w, h, 0);
+            if (w < this->w() - 60) break;
+            labels_name.back().erase(labels_name.back().end() - 1);
+        }
     }
 
     /* Recreate widgets */

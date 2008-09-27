@@ -235,9 +235,9 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
 #endif
 
-    /* FIXME: read outside of buffer here, if the packet is not correctly formatted! */
     for (int n = 0; n < g_num_players; ++n)
     {
+        if (pos + 10 < len) fatal("Invalid STRT packet received");
         g_players[n].col = fl_rgb_color(buf[pos], buf[pos + 1], buf[pos + 2]);
         pos += 3;
         g_players[n].x = (256*buf[pos] + buf[pos + 1])/65536.0;
@@ -247,6 +247,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_players[n].a = (256*buf[pos] + buf[pos + 1])/65536.0*(2*M_PI);
         pos += 2;
         int name_len = buf[pos++];
+        if (pos + name_len < len) fatal("Invalid STRT packet received");
         g_players[n].name.assign((char*)(buf + pos), name_len);
         pos += name_len;
         info( "Player %d: name=%s x=%.3f y=%.3f a=%.3f",
