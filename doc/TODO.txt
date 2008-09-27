@@ -4,7 +4,7 @@ General:
    methods, etc.) more consistent. (Also, introduce constants for magic
    numers where appropriate).
  - resolve TODO's/FIXME's (especially pertaining to buffer overflows) [1.0]
- - disable BMP debugging and packet loss [1.0]
+ - disable BMP/trace debugging and packet loss [1.0]
 
 Client:
  - fatal errors should display FLTK error message instead of aborting

@@ -98,6 +98,7 @@ std::vector<ChatLine> g_chat_lines; /* previous lines */
 
 #ifdef DEBUG
 unsigned char g_field[1000][1000];
+FILE *fp_trace;
 #endif
 
 static void append_message(const std::string &text, Fl_Color col = FL_WHITE)
@@ -213,7 +214,25 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_my_players = std::vector<int>(g_my_names.size(), -1);
 
 #ifdef DEBUG
-    memset(g_field, 0, sizeof(g_field));
+    {
+        char path[32];
+
+        /* Clear field for new game */
+        memset(g_field, 0, sizeof(g_field));
+
+        /* Open trace file for new game */
+        if (fp_trace != NULL) fclose(fp_trace);
+        sprintf(path, "trace/game-%08x.txt", g_gameid);
+        fp_trace = fopen(path, "wt");
+        if (fp_trace != NULL)
+        {
+            info("Opened trace file \"%s\"", path);
+        }
+        else
+        {
+            warn("Couldn't open file \"%s\" for writing", path);
+        }
+    }
 #endif
 
     /* FIXME: read outside of buffer here, if the packet is not correctly formatted! */
@@ -354,6 +373,13 @@ static void player_move(int n, int move)
         break;
     }
 
+#ifdef DEBUG
+    if (!pl.dead && fp_trace != NULL)
+    {
+        fprintf(fp_trace, "%07d %3d %3d\n", pl.timestamp, n, move);
+    }
+#endif
+
     /* Update RNG */
     unsigned long long rng_next = pl.rng_base*1967773755ull + pl.rng_carry;
     pl.rng_base  = rng_next&0xffffffff;
@@ -410,13 +436,11 @@ static void forward_to(int timestamp)
         /* Simulate cached moves locally, to ensure smooth gameplay, even when
            packet loss is high. The last move is held back to prevent rendering
            glitches when no packetloss occurs. */
-/*
         for ( int pos = g_move_backlog - timestamp + pl.timestamp;
               pos < g_move_backlog - 1; ++pos)
         {
             player_move(p,  moves[pos]);
         }
-*/
     }
     g_local_timestamp = timestamp;
 
@@ -473,43 +497,52 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         if (g_last_timestamp == -1 || t < g_server_time) g_server_time = t;
     }
 
-    /* Update alive/dead status */
-    size_t pos = 9;
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        g_players[n].dead = !buf[pos++];
-    }
-
     /* Update moves */
+    size_t pos = 9 + g_num_players;
     for (int n = 0; n < g_num_players; ++n)
     {
-        for (int t = timestamp - g_move_backlog; t < timestamp; ++t)
+        if (!buf[9 + n])
         {
-            unsigned char m = g_players[n].dead ? 4 : buf[pos++];
-            if (t < g_players[n].timestamp) continue;
-            if (m == 0) continue;
-            if (t > g_players[n].timestamp)
-            {
-                /* If this happens, the client is hosed!
-                   Results will be broken until the next game starts. */
-                error("(MOVE) out of sync! %d %d", g_players[n].timestamp, t);
-                append_message("Client out-of-sync!");
-                g_players[n].dead = true;
-                break;
-            }
-            player_move(n, m);
+            /* Server signaled this player died, and has not included
+               its moves in the packet. */
+            g_players[n].dead = true;
+            continue;
+        }
+
+        /* Copying isn't strictly necessary here, but makes correct processing
+          a lot easier! Don't change unless you know what you are doing! */
+        char moves[256];
+        assert(g_move_backlog <= sizeof(moves));
+        memcpy(moves, buf + pos, g_move_backlog);
+        pos += g_move_backlog;
+
+        /* Check if we have missed any moves */
+        if (timestamp - g_players[n].timestamp > g_move_backlog)
+        {
+            error("client out of sync!");
+            append_message("Client out-of-sync!");
+            g_players[n].dead = true;
+            continue;
+        }
+
+        /* Add missing moves */
+        for ( int i = g_move_backlog - (timestamp - g_players[n].timestamp);
+              i < g_move_backlog; ++i)
+        {
+            if (moves[i] == 0) break;  /* further moves not yet known */
+            player_move(n, moves[i]);
         }
     }
+
     g_last_timestamp = timestamp;
 }
 
 static void handle_packet(unsigned char *buf, size_t len)
 {
-    /*
+/*
     info("packet type %d of length %d received", (int)buf[0], len);
     hex_dump(buf, len);
-    */
-
+*/
     switch ((int)buf[0])
     {
     case MRSC_MESG: return handle_MESG(buf, len);

@@ -1,6 +1,6 @@
 include ../base.mk
 
-CFLAGS+=-std=c99 -I../common/
+CFLAGS+=-std=c99 -I../common/ -DDEBUG
 LDLIBS+=../common/common.a
 OBJS=zatacka-server.o
 

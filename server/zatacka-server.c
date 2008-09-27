@@ -19,7 +19,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
-#include <sys/time.h> 
+#include <sys/time.h>
 #include <sys/resource.h>
 
 #ifndef M_PI
@@ -47,7 +47,6 @@ struct RGB
 {
     unsigned char r, g, b;
 };
-
 
 typedef struct Player
 {
@@ -113,6 +112,10 @@ static unsigned g_gameid;
 static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
 unsigned char g_field[1000][1000];
+
+#ifdef DEBUG
+FILE *fp_trace;
+#endif
 
 /*
     Function prototypes
@@ -219,7 +222,7 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
         if ( send(cl->fd_stream, header, 2, MSG_DONTWAIT) != 2 ||
              send(cl->fd_stream, buf, len, MSG_DONTWAIT) != (ssize_t)len )
         {
-            error("reliable send() failed");
+            warn("reliable send() failed");
             client_disconnect(cl, NULL);
         }
     }
@@ -435,16 +438,15 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     {
         Player *pl = &cl->players[p];
 
-        if (timestamp <= pl->timestamp)
+        int added = timestamp - pl->timestamp;
+        if (added < 0)
         {
             warn("(MOVE) discarded out-of-order move packet");
             return;
         }
-
-        int added = timestamp - pl->timestamp;
         if (added > MOVE_BACKLOG)
         {
-            warn("(MOVE) discarded packet from long dead player");
+            warn("(MOVE) discarded packet from out-of-sync player");
             return;
         }
 
@@ -465,6 +467,14 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             else
             if (pl->dead_since == -1)
             {
+#ifdef DEBUG
+                if (fp_trace)
+                {
+                    fprintf( fp_trace, "%07d %3d %3d\n",
+                             pl->timestamp, pl->index, m );
+                }
+#endif
+
                 if (pl->hole == -1 && pl->rng_base%HOLE_PROBABILITY == 0)
                 {
                     pl->hole = HOLE_LENGTH_MIN +
@@ -568,14 +578,25 @@ static void restart_game()
     if (g_num_clients == 0) return;
     if (g_num_players > 0)
 
+#ifdef DEBUG
+    if (g_gameid != 0)
     {
         char path[32];
+
+        info("HERE");
+
+        /* Dump field to BMP image */
         sprintf(path, "bmp/field-%08x.bmp", g_gameid);
         if (bmp_write(path, &g_field[0][0], 1000, 1000))
         {
             info("Field dumped to file \"%s\"", path);
         }
+        else
+        {
+            warn("Couldn't write BMP file \"%s\"", path);
+        }
     }
+#endif
 
     /* Update scores */
     for (int n = 0; n < g_num_players; ++n)
@@ -618,6 +639,25 @@ static void restart_game()
                ((rand()&255) << 16) |
                ((rand()&255) <<  8) |
                ((rand()&255) <<  0);
+
+#ifdef DEBUG
+    {
+        char path[32];
+
+        /* Open trace file for new game */
+        if (fp_trace != NULL) fclose(fp_trace);
+        sprintf(path, "trace/game-%08x.txt", g_gameid);
+        fp_trace = fopen(path, "wt");
+        if (fp_trace != NULL)
+        {
+            info("Opened trace file \"%s\"", path);
+        }
+        else
+        {
+            warn("Couldn't open file \"%s\" for writing", path);
+        }
+    }
+#endif
 
     /* Initialize players */
     for (int n = 0; n < g_num_players; ++n)

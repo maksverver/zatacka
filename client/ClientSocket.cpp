@@ -26,7 +26,7 @@ typedef int socklen_t;
 
 /* For debugging: simulated probability of packet loss (between 0 and 1)
                   (applies only to unreliable packet data) */
-static double g_packetloss = 0.5;
+static double g_packetloss = 0;
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
