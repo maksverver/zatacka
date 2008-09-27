@@ -2,6 +2,7 @@
 #include "GameModel.h"
 #include <assert.h>
 #include <algorithm>
+#include <sstream>
 
 /* Compares to players by:
     - highest average score (first)
@@ -26,11 +27,11 @@ ScoreView::~ScoreView()
 {
 }
 
-std::string int_to_string(int i)
+template<class T> std::string stringify(const T &v)
 {
-    char buf[32];
-    sprintf(buf, "%d", i);
-    return std::string(buf);
+    std::ostringstream oss;
+    oss << v;
+    return oss.str();
 }
 
 void ScoreView::update(std::vector<Player> &players)
@@ -54,9 +55,9 @@ void ScoreView::update(std::vector<Player> &players)
     for (size_t n = 0; n < players.size(); ++n)
     {
         labels_name.push_back("  " + ordered_players[n]->name);
-        labels_score_cur.push_back(int_to_string(ordered_players[n]->score_cur));
-        labels_score_tot.push_back(int_to_string(ordered_players[n]->score_tot));
-        labels_score_avg.push_back(int_to_string(ordered_players[n]->score_avg));
+        labels_score_cur.push_back(stringify(ordered_players[n]->score_cur));
+        labels_score_tot.push_back(stringify(ordered_players[n]->score_tot));
+        labels_score_avg.push_back(stringify(ordered_players[n]->score_avg));
     }
 
     /* Recreate widgets */

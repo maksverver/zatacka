@@ -1,7 +1,5 @@
-#define DEBUG_BMP
 #include "common.h"
 #include "Config.h"
-#include "Debug.h"
 #include "GameModel.h"
 #include "GameView.h"
 #include "ScoreView.h"
@@ -12,12 +10,10 @@
 #include <string>
 #include <math.h>
 #include <string.h>
-
-#ifdef DEBUG_BMP
-void debug_dump_image(unsigned id);
-void debug_plot(double x, double y, int col);
-void debug_reset_image();
-#endif
+#include <Debug.h>
+#include <Time.h>
+#include <Field.h>
+#include <BMP.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
@@ -100,6 +96,10 @@ bool g_am_typing;                   /* am I typing a message? */
 std::string g_my_chat_text;         /* current line */
 std::vector<ChatLine> g_chat_lines; /* previous lines */
 
+#ifdef DEBUG
+unsigned char g_field[1000][1000];
+#endif
+
 static void append_message(const std::string &text, Fl_Color col = FL_WHITE)
 {
     if (!g_chat_lines.empty() && g_chat_lines.back().text == text)
@@ -173,8 +173,16 @@ static void handle_STRT(unsigned char *buf, size_t len)
         return;
     }
 
-#ifdef DEBUG_BMP
-    if (g_gameid != 0) debug_dump_image(g_gameid);
+#ifdef DEBUG
+    if (g_gameid != 0)
+    {
+        char path[32];
+        sprintf(path, "bmp/field-%08x.bmp", g_gameid);
+        if (bmp_write(path, &g_field[0][0], 1000, 1000))
+        {
+            info("Field dumped to file \"%s\"", path);
+        }
+    }
 #endif
 
     /* Read game parameters */
@@ -203,8 +211,9 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_my_moves = std::vector<std::string> (
         g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
     g_my_players = std::vector<int>(g_my_names.size(), -1);
-#ifdef DEBUG_BMP
-    debug_reset_image();
+
+#ifdef DEBUG
+    memset(g_field, 0, sizeof(g_field));
 #endif
 
     /* FIXME: read outside of buffer here, if the packet is not correctly formatted! */
@@ -300,13 +309,13 @@ static void player_advance(int n, int turn_dir)
         {
             g_gv->line(pl.x, pl.y, nx, ny, pl.col);
         }
-#ifdef DEBUG_BMP
-        if (pl.hole <= 0) debug_plot(nx, ny, n + 1);
-#endif
         pl.x = nx;
         pl.y = ny;
     }
 
+#ifdef DEBUG
+    if (pl.hole <= 0) field_plot(&g_field, pl.x, pl.y, n + 1);
+#endif
 }
 
 static void player_move(int n, int move)
@@ -401,13 +410,13 @@ static void forward_to(int timestamp)
         /* Simulate cached moves locally, to ensure smooth gameplay, even when
            packet loss is high. The last move is held back to prevent rendering
            glitches when no packetloss occurs. */
-        #if 0
+/*
         for ( int pos = g_move_backlog - timestamp + pl.timestamp;
               pos < g_move_backlog - 1; ++pos)
         {
             player_move(p,  moves[pos]);
         }
-        #endif
+*/
     }
     g_local_timestamp = timestamp;
 
@@ -471,7 +480,6 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         g_players[n].dead = !buf[pos++];
     }
 
-    hex_dump(buf + pos, g_move_backlog);
     /* Update moves */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -479,12 +487,12 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         {
             unsigned char m = g_players[n].dead ? 4 : buf[pos++];
             if (t < g_players[n].timestamp) continue;
-            if (m == 0) break;
+            if (m == 0) continue;
             if (t > g_players[n].timestamp)
             {
                 /* If this happens, the client is hosed!
                    Results will be broken until the next game starts. */
-                error("(MOVE) out of sync!");
+                error("(MOVE) out of sync! %d %d", g_players[n].timestamp, t);
                 append_message("Client out-of-sync!");
                 g_players[n].dead = true;
                 break;
@@ -492,7 +500,6 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             player_move(n, m);
         }
     }
-
     g_last_timestamp = timestamp;
 }
 
@@ -688,19 +695,8 @@ void MainGameView::draw()
 {
     GameView::draw();
 
-    if (g_gameid == 0)
-    {
-        fl_font(FL_HELVETICA, 24);
-        fl_color(FL_WHITE);
-        fl_draw( "Succesfully connected to server!\n"
-                 "Please wait for the next round to start.",
-                 x(), y(), w(), h(), FL_ALIGN_CENTER );
-        return;
-    }
-
-
+    /* Draw chat lines */
     fl_font(FL_HELVETICA, 14);
-
     int x = this->x() + 8, y = this->y() + h() - 8;
     if (g_am_typing)
     {
@@ -708,13 +704,21 @@ void MainGameView::draw()
         fl_draw(("> " + g_my_chat_text).c_str(), x, y);
         y -= 16;
     }
-
-    assert(g_chat_lines.size() <= 5);
     for (int n = (int)g_chat_lines.size() - 1; n >= 0; --n)
     {
         fl_color(g_chat_lines[n].color);
         fl_draw(g_chat_lines[n].text.c_str(), x, y);
         y -= 16;
+    }
+
+    if (g_gameid == 0)
+    {
+        /* Display waiting screen */
+        fl_font(FL_HELVETICA, 24);
+        fl_color(FL_WHITE);
+        fl_draw( "Succesfully connected to server!\n"
+                 "Please wait for the next round to start.",
+                 this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
     }
 }
 

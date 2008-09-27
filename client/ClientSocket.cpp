@@ -1,5 +1,5 @@
 #include "ClientSocket.h"
-#include "Debug.h"
+#include <Debug.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -157,7 +157,7 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
         memcpy(packet + 2, buf, len);
         if (send(fd_stream, packet, len + 2, 0) != (ssize_t)len + 2)
         {
-            error("reliable send() failed");
+            warn("reliable send() failed");
         }
     }
     else

@@ -1,21 +1,17 @@
-FLTKC=fltk/bin/fltk-config
-CFLAGS=-g -Wall -Wextra -std=c99 -O2
-CXXFLAGS=-g -Wall -Wextra -ansi `$(FLTKC) --cxxflags` -O2
-LDFLAGS=`$(FLTKC) --ldstaticflags`
-OBJS=ClientSocket.o Config.o Debug.o GameModel.o GameView.o ScoreView.o debug-bmp.o
 
-all: zatacka zatacka-server
-
-zatacka-server: Debug.c zatacka-server.c
-	$(CC) $(CFLAGS) -o zatacka-server Debug.c zatacka-server.c -lm
-
-zatacka: $(OBJS) zatacka.o
-	$(CXX) -o zatacka $(OBJS) zatacka.o $(LDFLAGS)
+all:
+	make -C common all
+	make -C client all
+	make -C server all
 
 clean:
-	rm -f $(OBJS) zatacka.o zatacka-server.o
-
+	make -C common clean
+	make -C client clean
+	make -C server clean
+	
 distclean: clean
-	rm -f zatacka zatacka-server
+	make -C common distclean
+	make -C client distclean
+	make -C server distclean
 
 .PHONY: all clean distclean

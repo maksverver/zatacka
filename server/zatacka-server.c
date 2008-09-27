@@ -1,6 +1,11 @@
 #define _POSIX_SOURCE
-#include "Debug.h"
-#include "Protocol.h"
+
+#include <Protocol.h>
+#include <Debug.h>
+#include <Time.h>
+#include <Field.h>
+#include <BMP.h>
+
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
@@ -119,11 +124,6 @@ static struct RGB rgb_from_hue(double hue);
 /* Velocity at timestamp t */
 static double velocity(int t);
 
-/* Plot a dot at the given position in the given color.
-   Returns the maximum value of the colors of the overlapping pixels,
-   or 256 if the dot falls(partially) outside the field. */
-static int plot(double x, double y, int col);
-
 /* Disconnect a client (sending the given reason, if possible) */
 static void client_disconnect(Client *cl, const char *reason);
 
@@ -142,9 +142,6 @@ static void handle_packet( Client *cl,
 static void handle_HELO(Client *cl, unsigned char *buf, size_t len);
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len);
 static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
-
-/* Dump an image of the field in BMP format to file "bmp/field-GAMEID.bmp" */
-static void debug_dump_image();
 
 /* Restart the game (called when all players have died) */
 static void restart_game();
@@ -199,41 +196,6 @@ static struct RGB rgb_from_hue(double hue)
 static double velocity(int t)
 {
     return t < WARMUP ? 0.0 : 1.0;
-}
-
-static int plot(double x, double y, int col)
-{
-    static const bool templ[7][7] = {
-        { 0,0,1,1,1,0,0 },
-        { 0,1,1,1,1,1,0 },
-        { 1,1,1,1,1,1,1 },
-        { 1,1,1,1,1,1,1 },
-        { 1,1,1,1,1,1,1 },
-        { 0,1,1,1,1,1,0 },
-        { 0,0,1,1,1,0,0 } };
-
-    int cx = 1000*x;
-    int cy = 1000*y;
-
-    int res = 0;
-    for (int dx = -3; dx <= 3; ++dx)
-    {
-        for (int dy = -3; dy <= 3; ++dy)
-        {
-            if (!templ[dx + 3][dy + 3]) continue;
-            int x = cx + dx, y = cy + dy;
-            if (x >= 0 && x < 1000 && y >= 0 && y < 1000)
-            {
-                if (g_field[y][x] > res) res = g_field[y][x];
-                g_field[y][x] = col;
-            }
-            else
-            {
-                res = 256;
-            }
-        }
-    }
-    return res;
 }
 
 static void client_broadcast(const void *buf, size_t len, bool reliable)
@@ -518,19 +480,25 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
 
                 /* First, blank out previous dot */
-                if (pl->prev_hole <= 0) plot(pl->x, pl->y, 0);
+                if (pl->prev_hole <= 0)
+                {
+                    field_plot(&g_field, pl->x, pl->y, 0);
+                }
 
                 /* Check for out-of-bounds or overlapping dots */
                 if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
-                     plot(nx, ny, pl->index + 1) != 0 )
+                     field_plot(&g_field,nx, ny, pl->index + 1) != 0 )
                 {
                     player_kill(pl);
                 }
 
                 /* Redraw previous dot */
-                if (pl->prev_hole <= 0) plot(pl->x, pl->y, pl->index + 1);
+                if (pl->prev_hole <= 0)
+                {
+                    field_plot(&g_field, pl->x, pl->y, pl->index + 1);
+                }
 
-                if (pl->hole > 0) plot(nx, ny, 0);
+                if (pl->hole > 0) field_plot(&g_field,nx, ny, 0);
 
                 pl->x = nx;
                 pl->y = ny;
@@ -591,72 +559,6 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
     client_broadcast(packet, pos, true);
 }
 
-static void debug_dump_image()
-{
-    char path[64];
-    FILE *fp;
-
-    struct BMP_Header
-    {
-        char   bfType[2];
-        int    bfSize;
-        int    bfReserved;
-        int    bfOffBits;
-
-        int    biSize;
-        int    biWidth;
-        int    biHeight;
-        short  biPlanes;
-        short  biBitCount;
-        int    biCompression;
-        int    biSizeImage;
-        int    biXPelsPerMeter;
-        int    biYPelsPerMeter;
-        int    biClrUsed;
-        int    biClrImportant;
-    } __attribute__((__packed__)) bmp_header = {
-        .bfType = { 'B', 'M' },
-        .bfSize = 54 + 1000*1000 + 256*4,
-        .bfOffBits = 54 + 1024,
-        .biSize = 40,
-        .biWidth = 1000,
-        .biHeight = 1000,
-        .biPlanes = 1,
-        .biBitCount = 8,
-    };
-    struct BMP_RGB {
-        unsigned char b, g, r, a;
-    } bmp_palette[256] = {
-        {    0,   0,   0,   0 },
-        {    0,   0, 255,   0 },
-        {    0, 255,   0,   0 },
-        {  255,   0,   0,   0 },
-        {    0, 255, 255,   0 },
-        {  255,   0, 255,   0 },
-        {  255, 255,   0,   0 },
-        {  255, 255, 255,   0 } };
-
-    assert(sizeof(bmp_header) == 54);
-    assert(sizeof(bmp_palette) == 1024);
-
-    sprintf(path, "bmp/field-%08x.bmp", g_gameid);
-    fp = fopen(path, "wb");
-    if (fp == NULL) fatal("can't open %s for writing.", path);
-    if (fwrite(&bmp_header, sizeof(bmp_header), 1, fp) != 1)
-    {
-        fatal("couldn't write BMP header");
-    }
-    if (fwrite(&bmp_palette, sizeof(bmp_palette), 1, fp) != 1)
-    {
-        fatal("couldn't write BMP palette data");
-    }
-    if (fwrite(g_field, 1000, 1000, fp) != 1000)
-    {
-        fatal("couldn't write BMP pixel data");
-    }
-    fclose(fp);
-}
-
 static void restart_game()
 {
     g_time_start = time_now();
@@ -664,7 +566,16 @@ static void restart_game()
     g_deadline = -1;
 
     if (g_num_clients == 0) return;
-    if (g_num_players > 0) debug_dump_image();
+    if (g_num_players > 0)
+
+    {
+        char path[32];
+        sprintf(path, "bmp/field-%08x.bmp", g_gameid);
+        if (bmp_write(path, &g_field[0][0], 1000, 1000))
+        {
+            info("Field dumped to file \"%s\"", path);
+        }
+    }
 
     /* Update scores */
     for (int n = 0; n < g_num_players; ++n)
