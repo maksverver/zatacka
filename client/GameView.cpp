@@ -53,7 +53,7 @@ void GameView::draw()
 
         if (sprites[n].type == Sprite::DOT)
         {
-            int r = ceil(0.003*this->w());
+            int r = (int)ceil(0.003*this->w());
             int ix = x() + sprites[n].x - r;
             int iy = x() + sprites[n].y - r;
             int iw = 2*r + 1;
@@ -78,7 +78,7 @@ void GameView::draw()
 
 void GameView::dot(double x, double y, Fl_Color c)
 {
-    int r = ceil(0.003*this->w());
+    int r = (int)ceil(0.003*this->w());
     int ix = (int)(this->w()*x) - r;
     int iy = (int)(this->h()*(1.0 - y)) - 1 - r;
     int iw = 2*r + 1;

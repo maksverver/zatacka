@@ -571,7 +571,7 @@ void callback(void *arg)
     if (g_last_timestamp >= 0)
     {
         /* Estimate server timestamp */
-        int server_timestamp = floor((t - g_server_time)*g_data_rate);
+        int server_timestamp = (int)floor((t - g_server_time)*g_data_rate);
         forward_to(server_timestamp + 1);
     }
 

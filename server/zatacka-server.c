@@ -1,10 +1,10 @@
 #define _POSIX_SOURCE
 
-#include <Protocol.h>
-#include <Debug.h>
-#include <Time.h>
-#include <Field.h>
-#include <BMP.h>
+#include <common/Protocol.h>
+#include <common/Debug.h>
+#include <common/Time.h>
+#include <common/Field.h>
+#include <common/BMP.h>
 
 #include <assert.h>
 #include <math.h>
