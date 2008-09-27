@@ -1,5 +1,5 @@
 #include "ClientSocket.h"
-#include <Debug.h>
+#include "common.h"
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>

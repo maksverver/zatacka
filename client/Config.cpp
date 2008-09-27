@@ -22,6 +22,28 @@ static const int key_num[4][2] = {
 
 Config::Config()
 {
+    /* Set some default values */
+    m_resolution = 1;
+    m_fullscreen = false;
+    m_width  = res_width[m_resolution];
+    m_height = res_height[m_resolution];
+
+    m_hostname = "localhost";
+    m_port = 12321;
+
+    m_num_players = 1;
+    m_player_index[0] = 0;
+    {
+        static char buf[16];
+        sprintf(buf, "Player-%04x", rand()&0xffff);
+        m_names[0].assign(buf);
+    }
+
+    for (int n = 0; n < 4; ++n)
+    {
+        m_keys[n][0] = key_num[n][0];
+        m_keys[n][1] = key_num[n][1];
+    }
 }
 
 Config::~Config()
@@ -31,23 +53,23 @@ Config::~Config()
 bool Config::copy_settings()
 {
     /* Copy settings */
+    m_resolution = w_resolution->value();
     m_fullscreen = w_fullscreen->value();
-    m_width  = res_width[w_resolution->value()];
-    m_height = res_height[w_resolution->value()];
+    m_width  = res_width[m_resolution];
+    m_height = res_height[m_resolution];
 
     /* Network config */
     m_hostname = w_hostname->value();
     m_port = atoi(w_port->value());
 
     /* Players */
-    m_players = 0;
+    m_num_players = 0;
     for (int n = 0; n < 4; ++n)
     {
-        if (!w_players[n]->value() || *w_names[n]->value() == '\0') continue;
-        m_names[m_players] = w_names[n]->value();
-        m_keys[m_players][0] = key_num[n][0];
-        m_keys[m_players][1] = key_num[n][1];
-        m_players += 1;
+        m_names[n] = w_names[n]->value();
+        if (!w_players[n]->value() || m_names[n].empty()) continue;
+        /* TODO: custom keys */
+        m_player_index[m_num_players++] = n;
     }
 
     return true;
@@ -88,36 +110,38 @@ bool Config::show_window()
     {
         w_resolution->add(res_str[n], "", NULL);
     }
-    w_resolution->value(res_default);
+    w_resolution->value(m_resolution);
     w_fullscreen = new Fl_Check_Button(110, 70, 170, 20, "Fullscreen");
     display->end();
 
     Fl_Group *network = new Fl_Group(10, 140, 280, 80, "Network");
     network->box(FL_DOWN_FRAME);
     w_hostname = new Fl_Input(110, 160, 160, 20, "Host name: ");
-    w_hostname->value("localhost");
+    w_hostname->value(m_hostname.c_str());
     w_port = new Fl_Input(110, 180, 160, 20, "Port number: ");
-    w_port->value("12321");
+    char port_buf[32];
+    sprintf(port_buf, "%d", m_port);
+    w_port->value(port_buf);
     network->end();
 
     Fl_Group *players = new Fl_Group(10, 250, 280, 180, "Players");
     players->box(FL_DOWN_FRAME);
+    int i = 0;
     for (int n = 0; n < 4; ++n)
     {
         w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
         w_names[n] = new Fl_Input(40, 270+ n*40, 160, 20);
-        if (n == 0)
+
+        if (i < m_num_players && m_player_index[i] == n)
         {
-            /* HACK: set default name for faster debugging */
-            static char buf[16];
-            sprintf(buf, "Player-%04x", rand()&0xffff);
-            w_names[n]->value(buf);
             w_players[n]->value(1);
+            ++i;
         }
         else
         {
             w_names[n]->deactivate();
         }
+        w_names[n]->value(m_names[n].c_str());
         w_players[n]->callback(player_check_button_cb, w_names[n]);
         w_keys[n][0] = new Fl_Button(210, 270+ n*40, 30, 20, key_str[n][0]);
         w_keys[n][0]->deactivate();

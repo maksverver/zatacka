@@ -4,16 +4,12 @@
 #include "GameView.h"
 #include "ScoreView.h"
 #include "ClientSocket.h"
-#include "Protocol.h"
 #include <algorithm>
 #include <vector>
 #include <string>
 #include <math.h>
 #include <string.h>
-#include <Debug.h>
-#include <Time.h>
-#include <Field.h>
-#include <BMP.h>
+#include <stdarg.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "ws2_32.lib")
@@ -161,14 +157,12 @@ static void handle_DISC(unsigned char *buf, size_t len)
 {
     std::string msg = "Disconnected by server!";
     if (len > 1) msg += "\nReason: " + std::string((char*)buf + 1, len - 1);
-    info("%s", msg.c_str());
-    fl_alert(msg.c_str());
-    exit(0);
+    fatal("%s", msg.c_str());
 }
 
 static void handle_STRT(unsigned char *buf, size_t len)
 {
-    if (len < 11)
+    if (len < 16)
     {
         fatal("(STRT) packet too short");
         return;
@@ -237,7 +231,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (pos + 10 < len) fatal("Invalid STRT packet received");
+        if (pos + 10 > len) fatal("invalid STRT packet received");
         g_players[n].col = fl_rgb_color(buf[pos], buf[pos + 1], buf[pos + 2]);
         pos += 3;
         g_players[n].x = (256*buf[pos] + buf[pos + 1])/65536.0;
@@ -247,7 +241,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_players[n].a = (256*buf[pos] + buf[pos + 1])/65536.0*(2*M_PI);
         pos += 2;
         int name_len = buf[pos++];
-        if (pos + name_len < len) fatal("Invalid STRT packet received");
+        if (pos + name_len > len) fatal("invalid STRT packet received");
         g_players[n].name.assign((char*)(buf + pos), name_len);
         pos += name_len;
         info( "Player %d: name=%s x=%.3f y=%.3f a=%.3f",
@@ -266,7 +260,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
             }
         }
     }
-    assert((size_t)pos == len);
+    if (pos != len) warn("%d extra bytes in STRT packet", len - pos);
 
     /* Update gameid label */
     sprintf(g_gameid_text, "%08X", g_gameid);
@@ -513,7 +507,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         /* Copying isn't strictly necessary here, but makes correct processing
           a lot easier! Don't change unless you know what you are doing! */
         char moves[256];
-        assert(g_move_backlog <= sizeof(moves));
+        assert((size_t)g_move_backlog <= sizeof(moves));
         memcpy(moves, buf + pos, g_move_backlog);
         pos += g_move_backlog;
 
@@ -754,6 +748,24 @@ void MainGameView::draw()
                  "Please wait for the next round to start.",
                  this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
     }
+}
+
+void gui_fatal(const char *fmt, ...)
+{
+    char buf[1024];
+    size_t pos;
+
+    strcpy(buf, "A fatal error occured: ");
+    pos = strlen(buf);
+
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf + pos, sizeof(buf) - pos, fmt, ap);
+    va_end(ap);
+
+    info(buf);
+    fl_alert(buf);
+    exit(1);
 }
 
 int main(int argc, char *argv[])

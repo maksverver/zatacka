@@ -14,6 +14,22 @@
 #include <assert.h>
 #include <vector>
 
+/* Common objects */
+#include <Debug.h>
+#include <Protocol.h>
+#include <Time.h>
+#include <Field.h>
+#include <BMP.h>
+
+/* Redefine fatal to a function that uses the GUI to display the error
+   message to the user, instead of printing it on the console and aborting. */
+#ifdef fatal
+#undef fatal
+#endif
+__attribute__((noreturn)) void gui_fatal(const char *fmt, ...);
+#define fatal gui_fatal
+
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif

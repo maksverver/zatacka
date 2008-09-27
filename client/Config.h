@@ -17,9 +17,9 @@ public:
     int height() const { return m_height; }
     const std::string &hostname() const { return m_hostname; }
     int port() const { return m_port; }
-    int players() const { return m_players; }
-    const std::string &name(int n) const { return m_names[n]; }
-    int key(int n, int m) const { return m_keys[n][m]; }
+    int players() const { return m_num_players; }
+    const std::string &name(int n) const { return m_names[m_player_index[n]]; }
+    int key(int n, int m) const { return m_keys[m_player_index[n]][m]; }
 
 protected:
     bool copy_settings();
@@ -28,6 +28,7 @@ private:
     bool start;
 
     /* Game window configuration */
+    int  m_resolution;
     bool m_fullscreen;
     int  m_width, m_height;
 
@@ -36,7 +37,8 @@ private:
     int m_port;
 
     /* Players */
-    int m_players;
+    int m_num_players;
+    int m_player_index[4];
     std::string m_names[4];
     int m_keys[4][2];
 

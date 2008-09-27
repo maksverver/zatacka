@@ -4,12 +4,8 @@ General:
    methods, etc.) more consistent. (Also, introduce constants for magic
    numers where appropriate).
  - resolve TODO's/FIXME's (especially pertaining to buffer overflows) [1.0]
- - disable BMP/trace debugging and packet loss [1.0]
 
 Client:
- - fatal errors should display FLTK error message instead of aborting
- - move client asynchronously (so gameplay is smooth even if ping or
-   packet loss is high) [1.0]
  - make player keys configurable [1.0]
  - (re)store last-used configuration settings
 
