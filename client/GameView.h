@@ -22,7 +22,7 @@ struct Sprite
 class GameView : public Fl_Widget
 {
 public:
-    GameView(int sprites, int x, int y, int w, int h);
+    GameView(int x, int y, int w, int h);
     ~GameView();
 
     void dot(double x, double y, Fl_Color c);
@@ -32,6 +32,10 @@ public:
     void setSpriteColor(int n, Fl_Color col);
     void setSpriteType(int n, Sprite::SpriteType);
     void setSpriteLabel(int n, const std::string &label );
+
+    void clear();
+    void setSprites(int count);
+    int getSprites() { return (int)sprites.size(); }
 
 protected:
     void useOffscreen();

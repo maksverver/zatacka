@@ -1,8 +1,8 @@
 #include "GameView.h"
 #include <algorithm>
 
-GameView::GameView(int sprites, int x, int y, int w, int h)
-    : Fl_Widget(x, y, w, h), offscr_created(false), sprites(sprites)
+GameView::GameView(int x, int y, int w, int h)
+    : Fl_Widget(x, y, w, h), offscr_created(false)
 {
 }
 
@@ -101,7 +101,7 @@ void GameView::dot(double x, double y, Fl_Color c)
     fl_color(c);
     fl_pie(ix, iy, iw, ih, 0, 360);
     fl_end_offscreen();
-    damage(1, ix, iy, iw, ih);
+    damage(1, this->x() + ix, this->y() + iy, iw, ih);
 }
 
 void GameView::line(double x1, double y1, double x2, double y2, Fl_Color c)
@@ -117,15 +117,16 @@ void GameView::line(double x1, double y1, double x2, double y2, Fl_Color c)
 
 void GameView::damageSprite(int n)
 {
-    damage(1, sprites[n].x - 24, sprites[n].y - 12, 48, 36);
+    damage(1, x() + sprites[n].x - 12, y() + sprites[n].y - 12, 24, 24);
 
     if (!sprites[n].label.empty())
     {
         int w = 0, h = 0;
         fl_font(FL_HELVETICA, 12);
         fl_measure(sprites[n].label.c_str(), w, h, 0);
-        damage(1, sprites[n].x - w/2 - 1, sprites[n].y + 12 - h, w + 2, 2*h);
+        damage(1, x() + sprites[n].x - w/2 - 1, y() + sprites[n].y + 6, w + 2, 24);
     }
+
 }
 
 void GameView::setSprite(int n, double x, double y, double a)
@@ -157,4 +158,25 @@ void GameView::setSpriteLabel(int n, const std::string &label)
     if (sprites[n].visible()) damageSprite(n);
     sprites[n].label = label;
     if (sprites[n].visible()) damageSprite(n);
+}
+
+void GameView::clear()
+{
+    if (offscr_created)
+    {
+        fl_begin_offscreen(offscr);
+        fl_color(FL_BLACK);
+        fl_rectf(0, 0, w(), h());
+        fl_end_offscreen();
+    }
+    damage(1);
+}
+
+void GameView::setSprites(int count)
+{
+    for (int n = count; n < getSprites(); ++n)
+    {
+        if (sprites[n].visible()) damageSprite(n);
+    }
+    sprites.resize(count);
 }

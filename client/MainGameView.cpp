@@ -30,8 +30,8 @@ static char shift(char c)
     }
 }
 
-MainGameView::MainGameView(int sprites, int x, int y, int w, int h)
-    : GameView(sprites, x, y, w, h), waiting(sprites == 0), typing(false)
+MainGameView::MainGameView(int x, int y, int w, int h)
+    : GameView(x, y, w, h), typing(false)
 {
 }
 
@@ -130,11 +130,6 @@ void MainGameView::updateTime(double t)
     damageChatText();
 }
 
-void MainGameView::setWaiting(bool w)
-{
-    waiting = w;
-}
-
 void MainGameView::damageChatText()
 {
     int height = 8 + 6*16;
@@ -161,7 +156,7 @@ void MainGameView::draw()
         y -= 16;
     }
 
-    if (waiting)
+    if (getSprites() == 0)
     {
         /* Display waiting screen */
         fl_font(FL_HELVETICA, 24);

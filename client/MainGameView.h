@@ -21,20 +21,19 @@ struct ChatLine
 class MainGameView : public GameView
 {
 public:
-    MainGameView(int sprites, int x, int y, int w, int h);
+    MainGameView(int x, int y, int w, int h);
     ~MainGameView();
 
     void appendMessage(const std::string &text, Fl_Color col = FL_WHITE);
     int handleKeyPress(int key);
     void updateTime(double t);
-    void setWaiting(bool w);
 
 protected:
     void damageChatText();
     void draw();
 
 private:
-    bool waiting, typing;
+    bool typing;
     std::string chat_text;
     std::vector<ChatLine> chat_lines;
 };
