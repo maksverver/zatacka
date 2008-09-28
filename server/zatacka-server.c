@@ -43,9 +43,10 @@ typedef int socklen_t;
 #define TURN_RATE             (40)
 #define MOVE_RATE              (7)
 #define SCORE_HISTORY         (10)
-#define HOLE_PROBABILITY      (70)
+#define HOLE_PROBABILITY      (60)
 #define HOLE_LENGTH_MIN        (2)
 #define HOLE_LENGTH_MAX        (6)
+#define HOLE_COOLDOWN         (10)
 
 #define VICTORY_TIME        (3*SERVER_FPS)
 #define WARMUP              (3*SERVER_FPS)
@@ -79,6 +80,7 @@ typedef struct Player
 
     /* Hole creation */
     int             hole, prev_hole;
+    int             solid_since;
 
     /* Multiply-with-carry RNG for this player
        (used to determine random state transitions) */
@@ -483,7 +485,10 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 }
 #endif
 
-                if (pl->hole == -1 && pl->rng_base%HOLE_PROBABILITY == 0)
+                if ( pl->hole == 0 &&
+                     pl->timestamp >= WARMUP +  HOLE_COOLDOWN &&
+                     pl->timestamp - pl->solid_since >= HOLE_COOLDOWN &&
+                     pl->rng_base%HOLE_PROBABILITY == 0 )
                 {
                     pl->hole = HOLE_LENGTH_MIN +
                                (pl->rng_base/HOLE_PROBABILITY)
@@ -498,7 +503,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
 
                 /* First, blank out previous dot */
-                if (pl->prev_hole <= 0)
+                if (pl->prev_hole == 0)
                 {
                     field_plot(&g_field, pl->x, pl->y, 0);
                 }
@@ -511,7 +516,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 }
 
                 /* Redraw previous dot */
-                if (pl->prev_hole <= 0)
+                if (pl->prev_hole == 0)
                 {
                     field_plot(&g_field, pl->x, pl->y, pl->index + 1);
                 }
@@ -521,8 +526,13 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 pl->x = nx;
                 pl->y = ny;
 
+                if (pl->prev_hole != 0 && pl->hole == 0)
+                {
+                    pl->solid_since = pl->timestamp;
+                }
+
                 pl->prev_hole = pl->hole;
-                if (pl->hole >= 0) --pl->hole;
+                if (pl->hole > 0) --pl->hole;
             }
 
             ++pl->timestamp;
@@ -678,10 +688,11 @@ static void restart_game()
         pl->a = 2.0*M_PI*rand()/RAND_MAX;
         pl->timestamp = 0;
         memset(pl->moves, 0, sizeof(pl->moves));
-        pl->hole      = -1;
-        pl->prev_hole = -1;
-        pl->rng_base  = g_gameid ^ n;
-        pl->rng_carry = 0;
+        pl->hole        = 0;
+        pl->prev_hole   = 0;
+        pl->solid_since = 0;
+        pl->rng_base    = g_gameid ^ n;
+        pl->rng_carry   = 0;
     }
 
     /* Build start game packet */
@@ -697,13 +708,14 @@ static void restart_game()
     packet[pos++] = (HOLE_PROBABILITY >> 0)&255;
     packet[pos++] = HOLE_LENGTH_MIN;
     packet[pos++] = HOLE_LENGTH_MAX - HOLE_LENGTH_MIN;
+    packet[pos++] = HOLE_COOLDOWN;
     packet[pos++] = MOVE_BACKLOG;
     packet[pos++] = g_num_players;
     packet[pos++] = (g_gameid>>24)&255;
     packet[pos++] = (g_gameid>>16)&255;
     packet[pos++] = (g_gameid>> 8)&255;
     packet[pos++] = (g_gameid>> 0)&255;
-    assert(pos == 16);
+    assert(pos == 17);
     for (int i = 0; i < g_num_players; ++i)
     {
         Player *pl = g_players[i];
