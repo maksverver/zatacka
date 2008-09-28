@@ -432,7 +432,7 @@ static void forward_to(int timestamp)
            packet loss is high. The last move is held back to prevent rendering
            glitches when no packetloss occurs. */
         for ( int pos = g_move_backlog - timestamp + pl.timestamp;
-              pos < g_move_backlog - 1; ++pos)
+              pos < g_move_backlog - 2; ++pos)
         {
             player_move(p,  moves[pos]);
         }

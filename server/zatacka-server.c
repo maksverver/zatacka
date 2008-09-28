@@ -38,7 +38,7 @@ typedef int socklen_t;
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
-#define TURN_RATE             (50)
+#define TURN_RATE             (40)
 #define MOVE_RATE              (7)
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY      (70)
@@ -673,8 +673,8 @@ static void restart_game()
         /* Reset player state to starting position */
         pl->dead_since = -1;
         pl->color = rgb_from_hue((double)pl->index/g_num_players);
-        pl->x = 0.1 + 0.8*rand()/RAND_MAX;
-        pl->y = 0.1 + 0.8*rand()/RAND_MAX;
+        pl->x = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->y = 0.02 + 0.96*rand()/RAND_MAX;
         pl->a = 2.0*M_PI*rand()/RAND_MAX;
         pl->timestamp = 0;
         memset(pl->moves, 0, sizeof(pl->moves));
