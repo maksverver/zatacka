@@ -1,0 +1,9 @@
+CFLAGS=-DWIN32
+LDLIBS=-lws2_32
+
+include Makefile
+
+all: zatacka-server.exe
+
+zatacka-server.exe: zatacka-server
+	mv zatacka-server zatacka-server.exe

@@ -26,6 +26,8 @@
 #else
 #include <winsock2.h>
 typedef int socklen_t;
+#define close closesocket
+#define ioctl ioctlsocket
 #endif
 
 #ifndef M_PI
