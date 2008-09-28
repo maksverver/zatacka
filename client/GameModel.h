@@ -9,7 +9,7 @@ struct Player
     Player()
         : col(), x(), y(), a(), timestamp(), last_move(),
           px(), py(), pa(), pt(),
-          dead(), hole(-1), name(),
+          dead(), hole(-1), solid_since(), name(),
           score_cur(), score_tot(), score_avg(),
           rng_base(), rng_carry() { };
 
@@ -21,6 +21,7 @@ struct Player
     int         pt;             /* predicted timestamp */
     bool        dead;           /* has died? */
     int         hole;           /* generating a hole */
+    int         solid_since;    /* earliest timestamp after last hole */
     std::string name;           /* display name */
     int         score_cur;      /* score this round*/
     int         score_tot;      /* total score */

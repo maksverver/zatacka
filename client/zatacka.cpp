@@ -47,6 +47,7 @@ int g_score_rounds;     /* number of rounds for the moving average score */
 int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
 int g_hole_length_min;  /* minimum length of a hole (in turns) */
 int g_hole_length_max;  /* maximum length of a hole (in turns) */
+int g_hole_cooldown;    /* minimum number of turns between holes */
 int g_move_backlog;     /* number of moves to cache and send/receive */
 int g_num_players;      /* number of players in the game == g_players.size() */
 
@@ -174,13 +175,14 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_hole_probability += buf[pos++];
     g_hole_length_min   = buf[pos++];
     g_hole_length_max   = buf[pos++] + g_hole_length_min;
+    g_hole_cooldown     = buf[pos++];
     g_move_backlog      = buf[pos++];
     g_num_players       = buf[pos++];
     g_gameid            = buf[pos++] << 24;
     g_gameid           += buf[pos++] << 16;
     g_gameid           += buf[pos++] <<  8;
     g_gameid           += buf[pos++];
-    assert(pos == 16);
+    assert(pos == 17);
 
     info("Restarting game with %d players", g_num_players);
     g_last_timestamp = -1;
@@ -319,7 +321,9 @@ static void player_move(int n, int move)
     }
 
     /* Change hole making state according to RNG */
-    if (pl.hole == -1 && pl.rng_base%g_hole_probability == 0)
+    if ( pl.hole == -1 && pl.timestamp >= g_warmup + g_hole_cooldown &&
+         pl.timestamp - pl.solid_since >= g_hole_cooldown &&
+         pl.rng_base%g_hole_probability == 0 )
     {
         pl.hole = g_hole_length_min +
                  pl.rng_base/g_hole_probability %
@@ -359,6 +363,7 @@ static void player_move(int n, int move)
     pl.rng_carry = rng_next>>32;
 
     /* Count down hole */
+    if (pl.hole == 0) pl.solid_since = pl.timestamp;
     if (pl.hole >= 0) --pl.hole;
 
     /* Increment player timestamp */
