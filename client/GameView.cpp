@@ -124,7 +124,7 @@ void GameView::damageSprite(int n)
         int w = 0, h = 0;
         fl_font(FL_HELVETICA, 12);
         fl_measure(sprites[n].label.c_str(), w, h, 0);
-        damage(1, x() + sprites[n].x - w/2 - 1, y() + sprites[n].y + 6, w + 2, 24);
+        damage(1, x() + sprites[n].x - w/2 - 4, y() + sprites[n].y + 6, w + 8, 24);
     }
 
 }
