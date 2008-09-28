@@ -1,9 +1,9 @@
 #include "common.h"
+#include "ClientSocket.h"
 #include "Config.h"
 #include "GameModel.h"
-#include "GameView.h"
+#include "MainWindow.h"
 #include "ScoreView.h"
-#include "ClientSocket.h"
 #include <algorithm>
 #include <vector>
 #include <string>
@@ -18,34 +18,6 @@
 
 #define CLIENT_FPS 60
 
-class MainWindow : public Fl_Window
-{
-public:
-    MainWindow(int w, int h) : Fl_Window(w, h) { };
-    ~MainWindow() { };
-    int handle(int type);
-};
-
-class MainGameView : public GameView
-{
-public:
-    MainGameView(int sprites, int x, int y, int w, int h)
-        : GameView(sprites, x, y, w, h) { };
-    ~MainGameView() { };
-
-    void damageChatText();
-
-protected:
-    void draw();
-};
-
-struct ChatLine
-{
-    double time;
-    Fl_Color color;
-    std::string text;
-};
-
 class KeyBindings
 {
 public:
@@ -59,11 +31,7 @@ private:
 };
 
 /* Global variables*/
-Fl_Window *g_window;    /* main window */
-MainGameView *g_gv;     /* graphical game view */
-ScoreView *g_sv;        /* score view */
-char g_gameid_text[64]; /* game id label text */
-Fl_Box *g_gameid_box;   /* box displaying the current game id in its label */
+MainWindow *g_window;    /* main window */
 ClientSocket *g_cs;     /* client connection to the server */
 
 unsigned g_gameid;      /* current game id */
@@ -88,35 +56,10 @@ std::vector<int>         g_my_players;  /* indices of my players in g_players */
 
 std::vector<Player> g_players;  /* all players in the game */
 
-bool g_am_typing;                   /* am I typing a message? */
-std::string g_my_chat_text;         /* current line */
-std::vector<ChatLine> g_chat_lines; /* previous lines */
-
 #ifdef DEBUG
 unsigned char g_field[1000][1000];
 FILE *fp_trace;
 #endif
-
-static void append_message(const std::string &text, Fl_Color col = FL_WHITE)
-{
-    if (!g_chat_lines.empty() && g_chat_lines.back().text == text)
-    {
-        /* Don't duplicate messages */
-        g_chat_lines.back().time = time_now();
-        return;
-    }
-
-    ChatLine cl;
-    cl.time  = time_now();
-    cl.color = col;
-    cl.text  = text;
-    g_chat_lines.push_back(cl);
-
-    /* Only show the few latest messages */
-    while (g_chat_lines.size() > 5) g_chat_lines.erase(g_chat_lines.begin());
-
-    g_gv->damageChatText();
-}
 
 static void handle_MESG(unsigned char *buf, size_t len)
 {
@@ -135,7 +78,7 @@ static void handle_MESG(unsigned char *buf, size_t len)
     if (name.empty())
     {
         /* Show server message */
-        append_message("(server) " + text);
+        g_window->gameView()->appendMessage("(server) " + text);
     }
     else
     {
@@ -149,7 +92,7 @@ static void handle_MESG(unsigned char *buf, size_t len)
                 break;
             }
         }
-        append_message(name + ": " + text, col);
+        g_window->gameView()->appendMessage(name + ": " + text, col);
     }
 }
 
@@ -262,30 +205,20 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
     if (pos != len) warn("%d extra bytes in STRT packet", len - pos);
 
-    /* Update gameid label */
-    sprintf(g_gameid_text, "%08X", g_gameid);
-    g_gameid_box->label(g_gameid_text);
+    /* Update gameid label & gameview*/
+    g_window->setGameId(g_gameid);
+    g_window->resetGameView(g_num_players);
 
-    /* Recreate game widget */
-    {
-        MainGameView *new_gv = new MainGameView(
-            g_num_players, g_gv->x(), g_gv->y(), g_gv->w(), g_gv->h() );
-        g_window->remove(g_gv);
-        delete g_gv;
-        g_gv = new_gv;
-        g_window->add(g_gv);
-        g_gv->redraw();
-    }
-
+    GameView *gv = g_window->gameView();
     for (int n = 0; n < g_num_players; ++n)
     {
-        g_gv->setSprite(n, g_players[n].x, g_players[n].y,
-                           g_players[n].a, g_players[n].col );
-        g_gv->setSpriteType(n, Sprite::ARROW);
-        g_gv->setSpriteLabel(n, g_players[n].name);
+        gv->setSprite(n, g_players[n].x, g_players[n].y, g_players[n].a);
+        gv->setSpriteColor(n, g_players[n].col);
+        gv->setSpriteType(n, Sprite::ARROW);
+        gv->setSpriteLabel(n, g_players[n].name);
     }
 
-    g_sv->update(g_players);
+    g_window->scoreView()->update(g_players);
 }
 
 static void handle_SCOR(unsigned char *buf, size_t len)
@@ -304,7 +237,7 @@ static void handle_SCOR(unsigned char *buf, size_t len)
         pos += 8;
     }
 
-    g_sv->update(g_players);
+    g_window->scoreView()->update(g_players);
 }
 
 static void player_advance(int n, int turn_dir)
@@ -321,7 +254,7 @@ static void player_advance(int n, int turn_dir)
         double ny = pl.y + 1e-3*g_move_rate*sin(pl.a);
         if (pl.hole == -1)
         {
-            g_gv->line(pl.x, pl.y, nx, ny, pl.col);
+            g_window->gameView()->line(pl.x, pl.y, nx, ny, pl.col);
         }
         pl.x = nx;
         pl.y = ny;
@@ -339,8 +272,8 @@ static void player_move(int n, int move)
     /* Change sprite after warmup period ends */
     if (pl.timestamp == g_warmup)
     {
-        g_gv->setSpriteLabel(n, std::string());
-        g_gv->setSpriteType(n, Sprite::DOT);
+        g_window->gameView()->setSpriteLabel(n, std::string());
+        g_window->gameView()->setSpriteType(n, Sprite::DOT);
     }
 
     /* Change hole making state according to RNG */
@@ -363,7 +296,7 @@ static void player_move(int n, int move)
         if (!pl.dead)
         {
             pl.dead = true;
-            g_gv->setSpriteType(n, Sprite::HIDDEN);
+            g_window->gameView()->setSpriteType(n, Sprite::HIDDEN);
         }
         break;
     }
@@ -387,7 +320,7 @@ static void player_move(int n, int move)
     pl.timestamp++;
 
     /* Update sprite */
-    g_gv->setSprite(n, pl.x, pl.y, pl.a, pl.col);
+    g_window->gameView()->setSprite(n, pl.x, pl.y, pl.a);
 
 }
 
@@ -515,7 +448,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         if (timestamp - g_players[n].timestamp > g_move_backlog)
         {
             error("client out of sync!");
-            append_message("Client out-of-sync!");
+            g_window->gameView()->appendMessage("Client out-of-sync!");
             g_players[n].dead = true;
             continue;
         }
@@ -560,14 +493,9 @@ void callback(void *arg)
     }
     if (len < 0) error("socket read failed");
 
-    /* Do timed events: */
+    /* Do timed events */
     double t = time_now();
-    while (!g_chat_lines.empty() && g_chat_lines.front().time < t - 8)
-    {
-        g_chat_lines.erase(g_chat_lines.begin());
-        g_gv->damageChatText();
-    }
-
+    g_window->gameView()->updateTime(t);
     if (g_last_timestamp >= 0)
     {
         /* Estimate server timestamp */
@@ -584,170 +512,19 @@ static void disconnect()
     if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
 }
 
-static void chat_message(const std::string &msg)
+void send_chat_message(const std::string &msg)
 {
     std::string packet = (char)MRCS_CHAT + msg;
     g_cs->write(packet.data(), packet.size(), true);
 }
 
-static void create_main_window(int width, int height, bool fullscreen)
+bool is_control_key(int key)
 {
-    /* Create main window */
-    g_window = new MainWindow(width, height);
-    g_window->label("Zatacka!");
-    g_window->color(fl_gray_ramp(FL_NUM_GRAY/4));
-    g_gv = new MainGameView(0, 2, 2, height - 4, height - 4);
-    g_sv = new ScoreView(height, 0, width - height, height - 20);
-    g_gameid_box = new Fl_Box(height, height - 20, width - height, 20);
-    g_gameid_box->labelfont(FL_HELVETICA);
-    g_gameid_box->labelsize(12);
-    g_gameid_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
-    g_gameid_box->align(FL_ALIGN_INSIDE);
-    g_window->end();
-    if (fullscreen) g_window->fullscreen();
-    g_window->show();
-}
-
-static char shift(char c)
-{
-    if (c >= 'a' && c <= 'z') return c - 'a' + 'A';
-    switch (c)
+    for (int n = 0; n < g_num_players; ++n)
     {
-    case '`': return '~';
-    case '1': return '!';
-    case '2': return '@';
-    case '3': return '#';
-    case '4': return '$';
-    case '5': return '%';
-    case '6': return '^';
-    case '7': return '&';
-    case '8': return '*';
-    case '9': return '(';
-    case '0': return ')';
-    case '-': return '_';
-    case '=': return '+';
-    case '\\': return '|';
-    case '[': return '{';
-    case ']': return '}';
-    case ';': return ':';
-    case '\'': return '"';
-    case ',': return '<';
-    case '.': return '>';
-    case '/': return '?';
-    default: return c;
+        if (g_my_keys[n].contains(key)) return true;
     }
-}
-
-int MainWindow::handle(int type)
-{
-    switch(type)
-    {
-        case FL_KEYDOWN:
-        {
-            int key = Fl::event_key();
-            if ( key != FL_Enter && key != FL_Escape && key != FL_BackSpace
-                 && (key < 32 || key > 126) )
-            {
-                /* Don't handle this key */
-                return 0;
-            }
-
-            /* Enter starts chat (or sends current message) */
-            if (key == FL_Enter)
-            {
-                if (!g_am_typing)
-                {
-                    g_am_typing = true;
-                }
-                else
-                {
-                    if (!g_my_chat_text.empty())
-                    {
-                        chat_message(g_my_chat_text);
-                        g_my_chat_text.clear();
-                    }
-                    g_am_typing = false;
-                }
-            }
-            else
-            if (key == FL_Escape)
-            {
-                g_am_typing = false;
-                g_my_chat_text.clear();
-            }
-            else
-            if (key == FL_BackSpace)
-            {
-                if (!g_my_chat_text.empty())
-                {
-                    g_my_chat_text.erase(g_my_chat_text.end() - 1);
-                }
-                else
-                {
-                    g_am_typing = false;
-                }
-            }
-            else
-            {
-                if (!g_am_typing)
-                {
-                    /* Start typing, except if the key pressed is also a
-                        control key. */
-                    g_am_typing = true;
-                    for (int n = 0; n < g_num_players; ++n)
-                    {
-                        if (g_my_keys[n].contains(key)) g_am_typing = false;
-                    }
-                }
-
-                if (g_am_typing && key >= 32 && key < 126)
-                {
-                    char c = Fl::event_state(FL_SHIFT) ? shift(key) : key;
-                    if (g_my_chat_text.size() < 100) g_my_chat_text += c;
-                }
-            }
-            g_gv->damageChatText();
-            return 1;
-        }
-    }
-    return 0;
-}
-
-void MainGameView::damageChatText()
-{
-    int height = 8 + 6*16;
-    damage(1, x(), y() + h() - height, w(), height);
-}
-
-void MainGameView::draw()
-{
-    GameView::draw();
-
-    /* Draw chat lines */
-    fl_font(FL_HELVETICA, 14);
-    int x = this->x() + 8, y = this->y() + h() - 8;
-    if (g_am_typing)
-    {
-        fl_color(FL_WHITE);
-        fl_draw(("> " + g_my_chat_text).c_str(), x, y);
-        y -= 16;
-    }
-    for (int n = (int)g_chat_lines.size() - 1; n >= 0; --n)
-    {
-        fl_color(g_chat_lines[n].color);
-        fl_draw(g_chat_lines[n].text.c_str(), x, y);
-        y -= 16;
-    }
-
-    if (g_gameid == 0)
-    {
-        /* Display waiting screen */
-        fl_font(FL_HELVETICA, 24);
-        fl_color(FL_WHITE);
-        fl_draw( "Succesfully connected to server!\n"
-                 "Please wait for the next round to start.",
-                 this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
-    }
+    return false;
 }
 
 void gui_fatal(const char *fmt, ...)
@@ -793,7 +570,8 @@ int main(int argc, char *argv[])
     } while (!g_cs->connected());
 
     /* Create window */
-    create_main_window(cfg.width(), cfg.height(), cfg.fullscreen());
+    g_window = new MainWindow(cfg.width(), cfg.height(), cfg.fullscreen());
+    g_window->show();
 
     /* Set-up names */
     for (int n = 0; n < cfg.players(); ++n)
@@ -819,8 +597,7 @@ int main(int argc, char *argv[])
         g_cs->write(packet, pos, true);
     }
 
-    /* FIXME: should wait for window to be visible */
-    Fl::add_timeout(0.3, callback, NULL);
+    Fl::add_timeout(0, callback, NULL);
     Fl::run();
     disconnect();
     return 0;

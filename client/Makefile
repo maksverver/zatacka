@@ -4,7 +4,8 @@ FLTKC=../fltk/bin/fltk-config
 CXXFLAGS+=`$(FLTKC) --cxxflags` -I..
 LDFLAGS+=`$(FLTKC) --ldstaticflags`
 LDLIBS+=../common/common.a
-OBJS=ClientSocket.o Config.o GameModel.o GameView.o ScoreView.o zatacka.o
+OBJS=	ClientSocket.o Config.o GameModel.o GameView.o MainWindow.o \
+	MainGameView.o ScoreView.o zatacka.o
 
 all: zatacka
 

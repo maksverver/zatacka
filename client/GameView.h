@@ -28,7 +28,8 @@ public:
     void dot(double x, double y, Fl_Color c);
     void line(double x1, double y1, double x2, double y2, Fl_Color c);
 
-    void setSprite(int n, double x, double y, double a, Fl_Color col);
+    void setSprite(int n, double x, double y, double a);
+    void setSpriteColor(int n, Fl_Color col);
     void setSpriteType(int n, Sprite::SpriteType);
     void setSpriteLabel(int n, const std::string &label );
 

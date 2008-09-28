@@ -11,7 +11,6 @@
 #include <FL/fl_ask.H>
 #include <Fl/fl_draw.H>
 #include <Fl/x.H>
-#include <assert.h>
 #include <vector>
 
 #include <common/Debug.h>
@@ -27,6 +26,17 @@
 #endif
 __attribute__((noreturn)) void gui_fatal(const char *fmt, ...);
 #define fatal gui_fatal
+
+/* Define assert so it calls gui_fatal, which displays an error message instead
+   of printing on to the console and aborting. */
+#ifdef NDEBUG
+#define assert(expr) ((void)0)
+#else
+#define assert(expr) \
+    ((bool)(expr) ? (void)0 : \
+    (void)gui_fatal("assertion %s failed at %s:%d", #expr, __FILE__, __LINE__))
+#endif
+
 
 
 #ifndef M_PI

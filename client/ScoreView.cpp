@@ -1,6 +1,5 @@
 #include "ScoreView.h"
 #include "GameModel.h"
-#include <assert.h>
 #include <algorithm>
 #include <sstream>
 

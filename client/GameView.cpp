@@ -111,17 +111,23 @@ void GameView::damageSprite(int n)
         int w = 0, h = 0;
         fl_font(FL_HELVETICA, 12);
         fl_measure(sprites[n].label.c_str(), w, h, 0);
-        damage(1, sprites[n].x - w/2, sprites[n].y + 12 - h, w, 2*h);
+        damage(1, sprites[n].x - w/2 - 1, sprites[n].y + 12 - h, w + 2, 2*h);
     }
 }
 
-void GameView::setSprite(int n, double x, double y, double a, Fl_Color col)
+void GameView::setSprite(int n, double x, double y, double a)
 {
     assert(n >= 0 && (size_t)n < sprites.size());
     if (sprites[n].visible()) damageSprite(n);
     sprites[n].x = (int)(this->w()*x);
     sprites[n].y = (int)(this->h()*(1.0 - y)) - 1;
     sprites[n].a = a;
+    if (sprites[n].visible()) damageSprite(n);
+}
+
+void GameView::setSpriteColor(int n, Fl_Color col)
+{
+    if (sprites[n].visible()) damageSprite(n);
     sprites[n].col = col;
     if (sprites[n].visible()) damageSprite(n);
 }

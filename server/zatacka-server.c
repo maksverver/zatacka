@@ -589,8 +589,6 @@ static void restart_game()
     {
         char path[32];
 
-        info("HERE");
-
         /* Dump field to BMP image */
         sprintf(path, "bmp/field-%08x.bmp", g_gameid);
         if (bmp_write(path, &g_field[0][0], 1000, 1000))
