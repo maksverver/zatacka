@@ -7,15 +7,21 @@
 struct Player
 {
     Player()
-        : col(), x(), y(), a(), dead(), hole(-1), name(), timestamp(),
-          score_cur(), score_tot(), score_avg(), rng_base(), rng_carry() { };
+        : col(), x(), y(), a(), timestamp(), last_move(),
+          px(), py(), pa(), pt(),
+          dead(), hole(-1), name(),
+          score_cur(), score_tot(), score_avg(),
+          rng_base(), rng_carry() { };
 
     Fl_Color    col;            /* color */
     double      x, y, a;        /* position (0 <= x,y < 1) and angle */
+    int         timestamp;      /* last changed */
+    int         last_move;      /* last move (used for predictions) */
+    double      px, py, pa;     /* predicted position */
+    int         pt;             /* predicted timestamp */
     bool        dead;           /* has died? */
     int         hole;           /* generating a hole */
     std::string name;           /* display name */
-    int         timestamp;      /* last changed */
     int         score_cur;      /* score this round*/
     int         score_tot;      /* total score */
     int         score_avg;      /* moving average */

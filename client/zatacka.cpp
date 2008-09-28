@@ -53,6 +53,7 @@ std::vector<std::string> g_my_names;    /* my player names */
 std::vector<KeyBindings> g_my_keys;     /* my player keys */
 std::vector<std::string> g_my_moves;    /* my recent moves (each g_move_backlog long) */
 std::vector<int>         g_my_players;  /* indices of my players in g_players */
+std::vector<int>         g_my_indices;
 
 std::vector<Player> g_players;  /* all players in the game */
 
@@ -60,6 +61,44 @@ std::vector<Player> g_players;  /* all players in the game */
 unsigned char g_field[1000][1000];
 FILE *fp_trace;
 #endif
+
+static void player_reset_prediction(int n)
+{
+    Player &pl = g_players[n];
+    pl.px = g_players[n].x;
+    pl.py = g_players[n].y;
+    pl.pa = g_players[n].a;
+    pl.pt = g_players[n].timestamp;
+}
+
+static bool player_update_prediction(int n, int move)
+{
+    Player &pl = g_players[n];
+    if (pl.dead) return false;
+
+    int turn_dir = (move == 2) ? +1 : (move == 3) ? -1 : 0;
+    pl.pa += turn_dir*2.0*M_PI/g_turn_rate;
+    if (pl.pt >= g_warmup)
+    {
+        pl.px += 1e-3*g_move_rate*cos(pl.pa);
+        pl.py += 1e-3*g_move_rate*sin(pl.pa);
+    }
+    ++pl.pt;
+    return true;
+}
+
+static void update_sprites()
+{
+    for (int n = 0; n < g_num_players; ++n)
+    {
+        Player &pl = g_players[n];
+        while (pl.pt < g_local_timestamp)
+        {
+            if (!player_update_prediction(n, pl.last_move)) break;
+        }
+        g_window->gameView()->setSprite(n, pl.px, pl.py, pl.pa);
+    }
+}
 
 static void handle_MESG(unsigned char *buf, size_t len)
 {
@@ -149,6 +188,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_my_moves = std::vector<std::string> (
         g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
     g_my_players = std::vector<int>(g_my_names.size(), -1);
+    g_my_indices = std::vector<int>(g_num_players, -1);
 
 #ifdef DEBUG
     {
@@ -198,6 +238,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
         {
             if (g_my_names[m] == g_players[n].name)
             {
+                g_my_indices[n] = m;
                 g_my_players[m] = n;
                 break;
             }
@@ -212,12 +253,12 @@ static void handle_STRT(unsigned char *buf, size_t len)
     GameView *gv = g_window->gameView();
     for (int n = 0; n < g_num_players; ++n)
     {
-        gv->setSprite(n, g_players[n].x, g_players[n].y, g_players[n].a);
         gv->setSpriteColor(n, g_players[n].col);
         gv->setSpriteType(n, Sprite::ARROW);
         gv->setSpriteLabel(n, g_players[n].name);
+        player_reset_prediction(n);
     }
-
+    update_sprites();
     g_window->scoreView()->update(g_players);
 }
 
@@ -287,7 +328,9 @@ static void player_move(int n, int move)
     switch (move)
     {
     case 0: fatal("0 move passed to player_move!"); return;
-    default: error("invalid move (%d) interpreted as 1", (int)move);
+    default:
+        error("invalid move (%d) interpreted as 1", (int)move);
+        move = 1;
         /* falls through */
     case 1: player_advance(n,  0); break;  /* move ahead */
     case 2: player_advance(n, +1); break;  /* turn left */
@@ -300,6 +343,7 @@ static void player_move(int n, int move)
         }
         break;
     }
+    pl.last_move = move;
 
 #ifdef DEBUG
     if (!pl.dead && fp_trace != NULL)
@@ -318,10 +362,6 @@ static void player_move(int n, int move)
 
     /* Increment player timestamp */
     pl.timestamp++;
-
-    /* Update sprite */
-    g_window->gameView()->setSprite(n, pl.x, pl.y, pl.a);
-
 }
 
 static void forward_to(int timestamp)
@@ -333,7 +373,6 @@ static void forward_to(int timestamp)
     {
         int p = g_my_players[n];
         if (p < 0) continue;
-        Player &pl = g_players[p];
 
         std::string &moves = g_my_moves[n];
         std::rotate(moves.begin(), moves.begin() + delay, moves.end());
@@ -357,17 +396,7 @@ static void forward_to(int timestamp)
         for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos)
         {
             moves[pos] = m;
-        }
-
-        if (pl.dead) continue;
-
-        /* Simulate cached moves locally, to ensure smooth gameplay, even when
-           packet loss is high. The last move is held back to prevent rendering
-           glitches when no packetloss occurs. */
-        for ( int pos = g_move_backlog - timestamp + pl.timestamp;
-              pos < g_move_backlog - 2; ++pos)
-        {
-            player_move(p,  moves[pos]);
+            player_update_prediction(p, m);
         }
     }
     g_local_timestamp = timestamp;
@@ -460,9 +489,13 @@ static void handle_MOVE(unsigned char *buf, size_t len)
             if (moves[i] == 0) break;  /* further moves not yet known */
             player_move(n, moves[i]);
         }
+
+        if (g_my_indices[n] == -1) player_reset_prediction(n);
     }
 
     g_last_timestamp = timestamp;
+
+    update_sprites();
 }
 
 static void handle_packet(unsigned char *buf, size_t len)
@@ -501,6 +534,7 @@ void callback(void *arg)
         /* Estimate server timestamp */
         int server_timestamp = (int)floor((t - g_server_time)*g_data_rate);
         forward_to(server_timestamp + 1);
+        update_sprites();
     }
 
     Fl::repeat_timeout(1.0/CLIENT_FPS, callback, arg);
