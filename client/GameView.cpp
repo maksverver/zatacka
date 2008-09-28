@@ -56,7 +56,6 @@ void GameView::draw()
             fl_push_matrix();
             fl_translate(x() + sprites[n].x, y() + sprites[n].y);
             fl_rotate(180/M_PI*sprites[n].a);
-            info("%f", 1e-3*this->w());
             fl_scale(1e-3*this->w());
             fl_color(sprites[n].col);
             fl_begin_polygon();
