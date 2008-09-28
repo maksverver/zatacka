@@ -3,6 +3,9 @@ General:
  - clean up code, and make naming conventions (of classes, variables,
    methods, etc.) more consistent. (Also, introduce constants for magic
    numers where appropriate).
+ - BUG: when two holes are generated in immediate succcession, the server
+        draws a dot in between, but the client doesn't. This causes players
+        to crash at what looks like the middle of a large hole.
 
 Client:
  - make player keys configurable [1.0]

@@ -53,7 +53,20 @@ void GameView::draw()
 
         if (sprites[n].type == Sprite::DOT)
         {
-            int r = (int)ceil(0.003*this->w());
+            fl_push_matrix();
+            fl_translate(x() + sprites[n].x, y() + sprites[n].y);
+            fl_rotate(180/M_PI*sprites[n].a);
+            info("%f", 1e-3*this->w());
+            fl_scale(1e-3*this->w());
+            fl_color(sprites[n].col);
+            fl_begin_polygon();
+            fl_vertex(-10,  7);
+            fl_vertex(  5,  0);
+            fl_vertex(-10, -7);
+            fl_end_polygon();
+            fl_pop_matrix();
+            /*
+            int r = (int)ceil(0.004*this->w());
             int ix = x() + sprites[n].x - r;
             int iy = x() + sprites[n].y - r;
             int iw = 2*r + 1;
@@ -61,6 +74,7 @@ void GameView::draw()
 
             fl_color(sprites[n].col);
             fl_pie(ix, iy, iw, ih, 0, 360);
+            */
         }
 
         if (!sprites[n].label.empty())
