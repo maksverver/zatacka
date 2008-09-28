@@ -17,14 +17,14 @@
 #include <signal.h>
 #ifndef WIN32
 #include <arpa/inet.h>
-#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
-#include <sys/resource.h>
+#include <sys/types.h>
 #else
 #include <winsock2.h>
-#define MSG_DONTWAIT 0
 typedef int socklen_t;
 #endif
 
@@ -225,8 +225,8 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
         unsigned char header[2];
         header[0] = len>>8;
         header[1] = len&255;
-        if ( send(cl->fd_stream, header, 2, MSG_DONTWAIT) != 2 ||
-             send(cl->fd_stream, buf, len, MSG_DONTWAIT) != (ssize_t)len )
+        if ( send(cl->fd_stream, header, 2, 0) != 2 ||
+             send(cl->fd_stream, buf, len, 0) != (ssize_t)len )
         {
             warn("reliable send() failed");
             client_disconnect(cl, NULL);
@@ -234,7 +234,7 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
     }
     else
     {
-        if (sendto( g_fd_packet, buf, len, MSG_DONTWAIT,
+        if (sendto( g_fd_packet, buf, len, 0,
                     (struct sockaddr*)&cl->sa_remote,
                     sizeof(cl->sa_remote) ) != (ssize_t)len)
         {
@@ -838,6 +838,12 @@ static double process_frames()
     return 1.0;
 }
 
+static bool make_non_blocking(int fd)
+{
+    unsigned v = 1;
+    return ioctl(fd, FIONBIO, &v) == 0;
+}
+
 static int run()
 {
     for (;;)
@@ -884,6 +890,12 @@ static int run()
             if (sa_len != sizeof(sa) || sa.sin_family != AF_INET)
             {
                 error("accepted connection from unsupported remote address");
+                close(fd);
+            }
+            else
+            if (!make_non_blocking(fd))
+            {
+                error("could not put TCP socket non-blocking mode");
                 close(fd);
             }
             else
@@ -1071,6 +1083,10 @@ int main(int argc, char *argv[])
     if (bind(g_fd_packet, (struct sockaddr*)&sa_local, sizeof(sa_local)) != 0)
     {
         fatal("could not create UDP socket: bind() failed");
+    }
+    if (!make_non_blocking(g_fd_packet))
+    {
+        fatal("could not put UDP socket in non-blocking mode");
     }
 
     /* Main loop */
