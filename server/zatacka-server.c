@@ -369,11 +369,16 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         /* Parse name length */
         if (pos >= len)
         {
-            client_disconnect(cl, "(HELO) truncated player");
+            client_disconnect(cl, "(HELO) truncated packet");
             return;
         }
         size_t L = buf[pos++];
-        if (L < 1 || L > MAX_NAME_LEN || L > len - pos)
+        if (L > MAX_NAME_LEN)
+        {
+            client_disconnect(cl, "(HELO) player name too long");
+            return;
+        }
+        if (L < 1 || L > len - pos)
         {
             client_disconnect(cl, "(HELO) invalid name length");
             return;
@@ -385,9 +390,14 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
             pl->name[n] = buf[pos++];
             if (pl->name[n] < 32 || pl->name[n] > 126)
             {
-                client_disconnect(cl, "(HELO) invalid name character");
+                client_disconnect(cl, "(HELO) invalid characters in player name");
                 return;
             }
+        }
+        if (pl->name[0] == ' ' || pl->name[L-1] == ' ')
+        {
+            client_disconnect(cl, "(HELO) player name may not start or "
+                                  "end with space");
         }
         pl->name[L] = '\0';
 
@@ -403,7 +413,10 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
 
                 if (strcmp(cl->players[p].name, g_clients[n].players[m].name) == 0)
                 {
-                    client_disconnect(cl, "(HELO) name unavailable");
+                    char reason[128];
+                    sprintf(reason, "(HELO) player name \"%s\" already in use "
+                                    "on this server", cl->players[p].name);
+                    client_disconnect(cl, reason);
                     return;
                 }
             }
