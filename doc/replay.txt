@@ -1,28 +1,30 @@
 Replay file format (ASCII text, UNIX line endings)
 
 Line 1:
-	integer: file version (1)
-	integer: game id (G; 0 < G < 4294967296)
-	integer: number of players (N)
+    integer: file version (1)
+    integer: game id (G; 0 < G < 4294967296)
+    integer: number of players (N)
 
 Line 2:
-	integer: data rate (frames per second)
-	integer: turn rate
-	integer: move rate
-	integer: warm-up time
-	integer: inverse hole probability
-	integer: minimum hole size (inclusive)
-	integer: maximum hole size (inclusive)
+    integer: data rate (frames per second)
+    integer: turn rate
+    integer: move rate
+    integer: warm-up time
+    integer: inverse hole probability
+    integer: minimum hole size (inclusive)
+    integer: maximum hole size (inclusive)
+    integer: hole cooldown
 
 Line 3..N+2:
-	player name
+    player name
 
 Line N+3..2N+2:
-	real: player X coordinate
-	real: player Y coordinate
-	real: player angle
+    real: player X coordinate
+    real: player Y coordinate
+    real: player angle
 
 Lines 2N+3..EOF:
-	integer: timestamp (t; 0 < t)
-	integer: player index (i; 0 < i < N)
-	integer: move (m; 1 < m < 4)
+    integer: timestamp (t; 0 < t)
+    integer: player index (i; 0 < i < N)
+    integer: turn (0: don't turn, +1: turn left, -1: turn right)
+    integer: move (0: don't move, 1: forward, 2: forward without trace)

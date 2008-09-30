@@ -52,6 +52,8 @@ typedef int socklen_t;
 #define WARMUP              (3*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
+#define REPLAYDIR           "replay"
+
 struct RGB
 {
     unsigned char r, g, b;
@@ -123,9 +125,7 @@ static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
 unsigned char g_field[1000][1000];
 
-#ifdef DEBUG
-FILE *fp_trace;
-#endif
+FILE *fp_replay;                /* Record replay to this file */
 
 /*
     Function prototypes
@@ -133,9 +133,6 @@ FILE *fp_trace;
 
 /* Convert a hue (0 <= hue < 1) to RGB */
 static struct RGB rgb_from_hue(double hue);
-
-/* Velocity at timestamp t */
-static double velocity(int t);
 
 /* Disconnect a client (sending the given reason, if possible) */
 static void client_disconnect(Client *cl, const char *reason);
@@ -204,11 +201,6 @@ static struct RGB rgb_from_hue(double hue)
     }
 
     return res;
-}
-
-static double velocity(int t)
-{
-    return t < WARMUP ? 0.0 : 1.0;
 }
 
 static void client_broadcast(const void *buf, size_t len, bool reliable)
@@ -490,14 +482,6 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             else
             if (pl->dead_since == -1)
             {
-#ifdef DEBUG
-                if (fp_trace)
-                {
-                    fprintf( fp_trace, "%07d %3d %3d\n",
-                             pl->timestamp, pl->index, m );
-                }
-#endif
-
                 if ( pl->hole == 0 &&
                      pl->timestamp >= WARMUP +  HOLE_COOLDOWN &&
                      pl->timestamp - pl->solid_since >= HOLE_COOLDOWN &&
@@ -508,10 +492,18 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                                % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
                 }
 
-                if (m == 2) pl->a += 2.0*M_PI/TURN_RATE;
-                if (m == 3) pl->a -= 2.0*M_PI/TURN_RATE;
+                int a = (m == 2) ? +1 : (m == 3) ? -1 : 0;
+                int v = (pl->timestamp < WARMUP ? 0 : 1);
 
-                double v = velocity(pl->timestamp);
+                if (fp_replay != NULL)
+                {
+                    /* Write to trace: time, player, turn, move*/
+                    fprintf( fp_replay, "%d %d %d %d\n",
+                             pl->timestamp, pl->index, a, (pl->hole ? 2 : v) );
+                }
+
+                /* Calculate new angle/position */
+                pl->a += a*2.0*M_PI/TURN_RATE;
                 double nx = pl->x + v*1e-3*MOVE_RATE*cos(pl->a);
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
 
@@ -669,25 +661,6 @@ static void restart_game()
                ((rand()&255) <<  8) |
                ((rand()&255) <<  0);
 
-#ifdef DEBUG
-    {
-        char path[32];
-
-        /* Open trace file for new game */
-        if (fp_trace != NULL) fclose(fp_trace);
-        sprintf(path, "trace/game-%08x.txt", g_gameid);
-        fp_trace = fopen(path, "wt");
-        if (fp_trace != NULL)
-        {
-            info("Opened trace file \"%s\"", path);
-        }
-        else
-        {
-            warn("Couldn't open file \"%s\" for writing", path);
-        }
-    }
-#endif
-
     /* Initialize players */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -706,6 +679,39 @@ static void restart_game()
         pl->solid_since = 0;
         pl->rng_base    = g_gameid ^ n;
         pl->rng_carry   = 0;
+    }
+
+    {
+        /* Open replay file for new game */
+        char path[32];
+        if (fp_replay != NULL) fclose(fp_replay);
+        sprintf(path, REPLAYDIR "/game-%08x.txt", g_gameid);
+        fp_replay = fopen(path, "wt");
+        if (fp_replay != NULL)
+        {
+            info("Opened replay file \"%s\"", path);
+        }
+        else
+        {
+            warn("Couldn't open file \"%s\" for writing", path);
+        }
+
+        /* Write header */
+        fprintf( fp_replay, "%d %u %d\n",
+                 1, g_gameid, g_num_players );
+        fprintf( fp_replay, "%d %d %d %d %d %d %d %d\n",
+                 SERVER_FPS, TURN_RATE, MOVE_RATE, WARMUP, HOLE_PROBABILITY,
+                 HOLE_LENGTH_MIN, HOLE_LENGTH_MAX, HOLE_COOLDOWN );
+
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            fprintf(fp_replay, "%s\n", g_players[n]->name);
+        }
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            fprintf( fp_replay, "%.6f %.6f %.6f\n",
+                     g_players[n]->x, g_players[n]->y, g_players[n]->a );
+        }
     }
 
     /* Build start game packet */

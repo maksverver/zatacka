@@ -1,3 +1,3 @@
-CFLAGS+=-g -Wall -Wextra -O2 -DDEBUG
+CFLAGS+=-g -Wall -Wextra -O2
 CXXFLAGS+=$(CFLAGS)
 LDLIBS+=-lm
