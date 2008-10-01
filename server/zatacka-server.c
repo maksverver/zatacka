@@ -174,6 +174,7 @@ int main(int argc, char *argv[]);
 static struct RGB rgb_from_hue(double hue)
 {
     struct RGB res;
+    unsigned char *a, *b, *c;
 
     if (hue < 0 || hue >= 1)
     {
@@ -185,6 +186,8 @@ static struct RGB rgb_from_hue(double hue)
         res.r = (int)(255*3.0*(1/3.0 - hue));
         res.g = (int)(255*3.0*(hue));
         res.b = 0;
+        a = &res.r;
+        b = &res.g;
     }
     else
     if (hue < 2/3.0)
@@ -192,13 +195,21 @@ static struct RGB rgb_from_hue(double hue)
         res.r = 0;
         res.g = (int)(255*3.0*(2/3.0 - hue));
         res.b = (int)(255*3.0*(hue - 1/3.0));
+        a = &res.g;
+        b = &res.b;
     }
     else
     {
         res.r = (int)(255*3.0*(hue - 2/3.0));
         res.g = 0;
         res.b = (int)(255*3.0*(1.0 - hue));
+        a = &res.r;
+        b = &res.b;
     }
+
+    if (*a < *b) { c = a; a = b; b = c; }
+    *b = *b*255/(*a);
+    *a = 255;
 
     return res;
 }
