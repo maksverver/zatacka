@@ -36,7 +36,7 @@ typedef int socklen_t;
 
 #define MAX_CLIENTS           (64)
 #define SERVER_FPS            (30)
-#define MOVE_BACKLOG          (20)
+#define MOVE_BACKLOG          (60)
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
@@ -690,27 +690,27 @@ static void restart_game()
         if (fp_replay != NULL)
         {
             info("Opened replay file \"%s\"", path);
+
+            /* Write header */
+            fprintf( fp_replay, "%d %u %d\n",
+                     1, g_gameid, g_num_players );
+            fprintf( fp_replay, "%d %d %d %d %d %d %d %d\n",
+                     SERVER_FPS, TURN_RATE, MOVE_RATE, WARMUP, HOLE_PROBABILITY,
+                     HOLE_LENGTH_MIN, HOLE_LENGTH_MAX, HOLE_COOLDOWN );
+
+            for (int n = 0; n < g_num_players; ++n)
+            {
+                fprintf(fp_replay, "%s\n", g_players[n]->name);
+            }
+            for (int n = 0; n < g_num_players; ++n)
+            {
+                fprintf( fp_replay, "%.6f %.6f %.6f\n",
+                         g_players[n]->x, g_players[n]->y, g_players[n]->a );
+            }
         }
         else
         {
             warn("Couldn't open file \"%s\" for writing", path);
-        }
-
-        /* Write header */
-        fprintf( fp_replay, "%d %u %d\n",
-                 1, g_gameid, g_num_players );
-        fprintf( fp_replay, "%d %d %d %d %d %d %d %d\n",
-                 SERVER_FPS, TURN_RATE, MOVE_RATE, WARMUP, HOLE_PROBABILITY,
-                 HOLE_LENGTH_MIN, HOLE_LENGTH_MAX, HOLE_COOLDOWN );
-
-        for (int n = 0; n < g_num_players; ++n)
-        {
-            fprintf(fp_replay, "%s\n", g_players[n]->name);
-        }
-        for (int n = 0; n < g_num_players; ++n)
-        {
-            fprintf( fp_replay, "%.6f %.6f %.6f\n",
-                     g_players[n]->x, g_players[n]->y, g_players[n]->a );
         }
     }
 
