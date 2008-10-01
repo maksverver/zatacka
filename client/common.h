@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <Fl/Fl.H>
 #include <Fl/Fl_Widget.H>
+#include <Fl/Fl_Double_Window.H>
 #include <Fl/Fl_Box.H>
 #include <Fl/Fl_Check_Button.H>
 #include <Fl/Fl_Choice.H>

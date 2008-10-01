@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 MainWindow::MainWindow(int width, int height, bool fullscreen)
-    : Fl_Window(width, height)
+    : Fl_Double_Window(width, height)
 {
     label("Zatacka!");
     color(fl_gray_ramp(FL_NUM_GRAY/4));
