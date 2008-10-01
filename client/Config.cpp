@@ -112,6 +112,7 @@ bool Config::show_window()
     }
     w_resolution->value(m_resolution);
     w_fullscreen = new Fl_Check_Button(110, 70, 170, 20, "Fullscreen");
+    w_fullscreen->value(m_fullscreen);
     display->end();
 
     Fl_Group *network = new Fl_Group(10, 140, 280, 80, "Network");

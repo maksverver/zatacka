@@ -17,7 +17,7 @@
 #pragma comment(lib, "comctl32.lib")
 #endif
 
-#define CLIENT_FPS 60
+#define CLIENT_FPS 100
 
 class KeyBindings
 {
@@ -593,6 +593,8 @@ int main(int argc, char *argv[])
     /* Initialization */
     time_reset();
     srand(time(NULL));
+
+    Fl::visual(FL_DOUBLE|FL_INDEX);
 
     /* Configuration */
     Config cfg;
