@@ -531,7 +531,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 pl->x = nx;
                 pl->y = ny;
 
-                if (pl->prev_hole != 0 && pl->hole == 0)
+                if (pl->prev_hole != 0)
                 {
                     pl->solid_since = pl->timestamp;
                 }
