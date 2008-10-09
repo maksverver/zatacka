@@ -2,6 +2,7 @@
 #define CONFIG_H_INCLUDED
 
 #include "common.h"
+#include "KeyWindow.h"
 #include <string>
 
 class Config
@@ -19,10 +20,16 @@ public:
     int port() const { return m_port; }
     int players() const { return m_num_players; }
     const std::string &name(int n) const { return m_names[m_player_index[n]]; }
-    int key(int n, int m) const { return m_keys[m_player_index[n]][m]; }
+    int key(int n, int m) const {
+        return key_codes[m_keys[m_player_index[n]][m]];
+    }
+
+    bool save_settings(const char *path);
+    bool load_settings(const char *path);
 
 protected:
     bool copy_settings();
+    bool parse_setting(std::string &key, std::string &value, int i, int j);
 
 private:
     bool start;

@@ -1,10 +1,6 @@
 #include "KeyWindow.h"
 
-/* 102 keys on the keyboard, 8 buttons on the mouse.
-   Note that not all keys work on all platforms. */
-#define NUM_KEYS 102 + 8
-
-static const int key_codes[NUM_KEYS] =
+const int key_codes[NUM_KEYS] =
 {
     /* Letter keys (26) */
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
@@ -39,7 +35,7 @@ static const int key_codes[NUM_KEYS] =
     FL_Button + 5, FL_Button + 6, FL_Button + 7, FL_Button + 8
 };
 
-static const char *key_labels[NUM_KEYS] =
+const char *key_labels[NUM_KEYS] =
 {
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
     "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
@@ -69,7 +65,7 @@ static const char *key_labels[NUM_KEYS] =
 
 
 KeyWindow::KeyWindow(int width, int height, const char *title)
-    : Fl_Window(width, height, title), m_key_index(-1)
+    : Fl_Window(width, height, title), m_key()
 {
     set_modal();
 }
@@ -88,7 +84,7 @@ int KeyWindow::handle(int type)
     {
         if (key_codes[i] == key)
         {
-            m_key_index = i;
+            m_key = i;
             hide();
             return 1;
         }
@@ -99,10 +95,5 @@ int KeyWindow::handle(int type)
 
 int KeyWindow::key()
 {
-    return m_key_index >= 0 ? key_codes[m_key_index] : 0;
-}
-
-const char *KeyWindow::key_label()
-{
-    return m_key_index >= 0 ? key_labels[m_key_index] : NULL;
+    return m_key;
 }

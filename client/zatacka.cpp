@@ -587,6 +587,8 @@ void gui_fatal(const char *fmt, ...)
 
 int main(int argc, char *argv[])
 {
+    const char *cfg_path = "zatacka.cfg";
+
     (void)argc;
     (void)argv;
 
@@ -598,8 +600,10 @@ int main(int argc, char *argv[])
 
     /* Configuration */
     Config cfg;
+    cfg.load_settings(cfg_path);
     do {
         if (!cfg.show_window()) return 0;
+        cfg.save_settings(cfg_path);
 
         /* Try to connect to the server */
         g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());

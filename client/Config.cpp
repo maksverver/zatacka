@@ -1,5 +1,5 @@
 #include "Config.h"
-#include "KeyWindow.h"
+#include <fstream>
 
 /* Possible window sizes */
 static const int res_count = 8;
@@ -14,12 +14,12 @@ static const int res_height[res_count] = {
       480,  600,  768,  960,
      1024, 1050, 1200, 1050 };
 
-/* Key sets (static for now) */
-static const char *key_str[4][2] = {
-    { "@<-", "@->" }, { "A", "D" }, { "M", "." }, { "4", "6" } };
-static const int key_num[4][2] = {
-    { FL_Left, FL_Right }, { 'a', 'd' }, { 'm', '.' }, { '4', '6' } };
-
+/* Default key assignment */
+static const int default_keys[4][2] = {
+    { 86, 88 },   /* Left, Right */
+    {  0,  3 },   /* A, D */
+    { 12, 45 },   /* M, / */
+    { 29, 31 } }; /* 4, 6 */
 
 Config::Config()
 {
@@ -42,8 +42,8 @@ Config::Config()
 
     for (int n = 0; n < 4; ++n)
     {
-        m_keys[n][0] = key_num[n][0];
-        m_keys[n][1] = key_num[n][1];
+        m_keys[n][0] = default_keys[n][0];
+        m_keys[n][1] = default_keys[n][1];
     }
 }
 
@@ -69,7 +69,6 @@ bool Config::copy_settings()
     {
         m_names[n] = w_names[n]->value();
         if (!w_players[n]->value() || m_names[n].empty()) continue;
-        /* TODO: custom keys */
         m_player_index[m_num_players++] = n;
     }
 
@@ -131,14 +130,15 @@ void key_button_cb(Fl_Widget *w, void *arg)
 
 found:
     /* Display key binding window */
-    KeyWindow *kw = new KeyWindow(100, 50, "Key Binding");
-    new Fl_Box(0, 0, 100, 50, "Please press a key or mouse button...");
+    KeyWindow *kw = new KeyWindow(300, 60, "Key Binding");
+    new Fl_Box(0, 0, 300, 60, "Please press a key or mouse button...");
     kw->end();
     kw->show();
     while (kw->visible()) Fl::wait();
 
     /* Get new key */
-    int key = kw->key();
+    int key_index = kw->key();
+    int key = key_codes[key_index];
     if (key == 0) return;   /* canceled */
 
     /* If the key is already in use, swap it */
@@ -146,7 +146,7 @@ found:
     {
         for (int j = 0; j < 2; ++j)
         {
-            if ((q != p || i != j) && cfg->m_keys[q][j] == key)
+            if ((q != p || i != j) && cfg->m_keys[q][j] == key_index)
             {
                 cfg->m_keys[q][j] = cfg->m_keys[p][i];
                 cfg->w_keys[q][j]->label(cfg->w_keys[p][i]->label());
@@ -156,12 +156,8 @@ found:
 
 
     /* Now assign new key and label */
-    cfg->m_keys[p][i] = key;
-
-    /* NB. we don't copy the label string here, because it is statically
-            allocated by the KeyWindow. If that ever changes, this code
-            must be updated too! */
-    w_button->label(kw->key_label());
+    cfg->m_keys[p][i] = key_index;
+    w_button->label(key_labels[key_index]);
 }
 
 bool Config::show_window()
@@ -201,8 +197,8 @@ bool Config::show_window()
     {
         w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
         w_names[n] = new Fl_Input(40, 270+ n*40, 100, 20);
-        w_keys[n][0] = new Fl_Button(150, 270 + n*40, 60, 20, key_str[n][0]);
-        w_keys[n][1] = new Fl_Button(220, 270 + n*40, 60, 20, key_str[n][1]);
+        w_keys[n][0] = new Fl_Button(150, 270 + n*40, 60, 20, key_labels[m_keys[n][0]]);
+        w_keys[n][1] = new Fl_Button(220, 270 + n*40, 60, 20, key_labels[m_keys[n][1]]);
         if (i < m_num_players && m_player_index[i] == n)
         {
             w_players[n]->value(1);
@@ -231,3 +227,102 @@ bool Config::show_window()
 
     return start;
 }
+
+bool Config::parse_setting(std::string &key, std::string &value, int i, int j)
+{
+    if (key == "resolution")
+    {
+        int v = atoi(value.c_str());
+        if (v >= 0 && v < res_count)
+        {
+            m_resolution = v;
+            m_width  = res_width[v];
+            m_height = res_width[v];
+            return true;
+        }
+    }
+
+    if (key == "fullscreen")
+    {
+        m_fullscreen = (bool)atoi(value.c_str());
+        return true;
+    }
+
+    if (key == "hostname")
+    {
+        m_hostname = value;
+        return true;
+    }
+
+    if (key == "port")
+    {
+        m_port = atoi(value.c_str());
+        return true;
+    }
+
+    if (key == "names" && (0 <= i && i < 4) && (j == 0))
+    {
+        m_names[i] = value;
+        return true;
+    }
+
+    if (key == "keys" && (0 <= i && i < 4) && (0 <= j && j < 2))
+    {
+        int key_index = atoi(value.c_str());
+        if (key_index >= 0 && key_index < NUM_KEYS)
+        {
+            m_keys[i][j] = key_index;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+bool Config::load_settings(const char *path)
+{
+    bool res = false;
+    std::ifstream ifs(path);
+    std::string line;
+    while (getline(ifs, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        size_t sep = line.find('=');
+        if (sep == std::string::npos) continue;
+        std::string key(line, 0, sep), value(line, sep + 1);
+        int i = 0, j = 0;
+        if ((sep = key.find(':')) != std::string::npos)
+        {
+            std::string si(key, sep + 1, key.find(':', sep + 1));
+            i = atoi(si.c_str());
+            if ((sep = key.find(':', sep + 1)) != std::string::npos)
+            {
+                std::string sj(key, sep + 1, key.find(':', sep + 1));
+                j = atoi(sj.c_str());
+            }
+            key.erase(key.find(':'));
+        }
+        
+        if (parse_setting(key, value, i, j)) res = true;
+    }
+    return res;
+}
+
+bool Config::save_settings(const char *path)
+{
+    std::ofstream ofs(path);
+    ofs << "resolution=" << m_resolution << '\n';
+    ofs << "fullscreen=" << m_fullscreen << '\n';
+    ofs << "hostname=" << m_hostname << '\n';
+    ofs << "port=" << m_port << '\n';
+    for (int p = 0; p < 4; ++p)
+    {
+        ofs << "names:" << p << '=' << m_names[p] << '\n';
+        for (int i = 0; i < 2; ++i)
+        {
+            ofs << "keys:" << p << ':' << i << '=' << m_keys[p][i] << '\n';
+        }
+    }
+    return ofs;
+}
+

@@ -23,7 +23,7 @@ MainWindow::~MainWindow()
 
 int MainWindow::handle(int type)
 {
-    if (type == FL_KEYDOWN)
+    if (type == FL_KEYDOWN || type == FL_PUSH)
     {
         return gv->handleKeyPress(Fl::event_key());
     }
