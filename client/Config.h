@@ -54,6 +54,8 @@ private:
     Fl_Button *w_keys[4][2];
 
     friend void start_cb(Fl_Widget *button, void *arg);
+    friend void key_button_cb(Fl_Widget *w, void *arg);
+    friend void player_check_button_cb(Fl_Widget *w, void *arg);
 };
 
 

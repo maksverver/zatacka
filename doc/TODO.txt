@@ -6,10 +6,15 @@ General:
  - AI interface
 
 Client:
- - make player keys configurable [1.0]
+ - proper full screen mode on Windows
  - (re)store last-used configuration settings
+ - better (anti-aliased?) game rendering
 
 Server:
+ - more accurate rendering?
+   => scale to 2000x2000 resolution
+   => draw multiple dots to create more accurate lines
+      (Bresenham-style)
 
  Potential bug:
   - When a client is disconnected, it may have players active, which are pointed

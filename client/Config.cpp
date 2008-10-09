@@ -1,4 +1,5 @@
 #include "Config.h"
+#include "KeyWindow.h"
 
 /* Possible window sizes */
 static const int res_count = 8;
@@ -88,12 +89,79 @@ void start_cb(Fl_Widget *w, void *arg)
     }
 }
 
-static void player_check_button_cb(Fl_Widget *w, void *arg)
+void player_check_button_cb(Fl_Widget *w, void *arg)
 {
+    Config *cfg = (Config*)arg;
     Fl_Check_Button *b = (Fl_Check_Button*)w;
-    Fl_Widget *wa = (Fl_Widget*)arg;
-    if (b->value() == 0) wa->deactivate();
-    if (b->value() == 1) wa->activate();
+
+    /* Find player number */
+    int n = 0;
+    while (n < 4 && cfg->w_players[n] != b) ++n;
+    assert(n < 4);
+
+    if (b->value() == 0)
+    {
+        cfg->w_names[n]->deactivate();
+        cfg->w_keys[n][0]->deactivate();
+        cfg->w_keys[n][1]->deactivate();
+    }
+    if (b->value() == 1)
+    {
+        cfg->w_names[n]->activate();
+        cfg->w_keys[n][0]->activate();
+        cfg->w_keys[n][1]->activate();
+    }
+}
+
+void key_button_cb(Fl_Widget *w, void *arg)
+{
+    Fl_Button *w_button = (Fl_Button*)w;
+    Config *cfg = (Config*)arg;
+
+    /* Find the player and key index to be changed */
+    int p, i;
+    for (p = 0; p < 4; ++p)
+    {
+        for (i = 0; i < 2; ++i)
+        {
+            if (cfg->w_keys[p][i] == w_button) goto found;
+        }
+    }
+    assert(0);
+
+found:
+    /* Display key binding window */
+    KeyWindow *kw = new KeyWindow(100, 50, "Key Binding");
+    new Fl_Box(0, 0, 100, 50, "Please press a key or mouse button...");
+    kw->end();
+    kw->show();
+    while (kw->visible()) Fl::wait();
+
+    /* Get new key */
+    int key = kw->key();
+    if (key == 0) return;   /* canceled */
+
+    /* If the key is already in use, swap it */
+    for (int q = 0; q < 4; ++q)
+    {
+        for (int j = 0; j < 2; ++j)
+        {
+            if ((q != p || i != j) && cfg->m_keys[q][j] == key)
+            {
+                cfg->m_keys[q][j] = cfg->m_keys[p][i];
+                cfg->w_keys[q][j]->label(cfg->w_keys[p][i]->label());
+            }
+        }
+    }
+
+
+    /* Now assign new key and label */
+    cfg->m_keys[p][i] = key;
+
+    /* NB. we don't copy the label string here, because it is statically
+            allocated by the KeyWindow. If that ever changes, this code
+            must be updated too! */
+    w_button->label(kw->key_label());
 }
 
 bool Config::show_window()
@@ -102,6 +170,7 @@ bool Config::show_window()
 
     win = new Fl_Window(300, 500);
     win->label("Configuration");
+    win->set_modal();
 
     Fl_Group *display = new Fl_Group(10, 30, 280, 80, "Display");
     display->box(FL_DOWN_FRAME);
@@ -131,8 +200,9 @@ bool Config::show_window()
     for (int n = 0; n < 4; ++n)
     {
         w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
-        w_names[n] = new Fl_Input(40, 270+ n*40, 160, 20);
-
+        w_names[n] = new Fl_Input(40, 270+ n*40, 100, 20);
+        w_keys[n][0] = new Fl_Button(150, 270 + n*40, 60, 20, key_str[n][0]);
+        w_keys[n][1] = new Fl_Button(220, 270 + n*40, 60, 20, key_str[n][1]);
         if (i < m_num_players && m_player_index[i] == n)
         {
             w_players[n]->value(1);
@@ -141,19 +211,18 @@ bool Config::show_window()
         else
         {
             w_names[n]->deactivate();
+            w_keys[n][0]->deactivate();
+            w_keys[n][1]->deactivate();
         }
         w_names[n]->value(m_names[n].c_str());
-        w_players[n]->callback(player_check_button_cb, w_names[n]);
-        w_keys[n][0] = new Fl_Button(210, 270+ n*40, 30, 20, key_str[n][0]);
-        w_keys[n][0]->deactivate();
-        w_keys[n][1] = new Fl_Button(250, 270+ n*40, 30, 20, key_str[n][1]);
-        w_keys[n][1]->deactivate();
+        w_players[n]->callback(player_check_button_cb, this);
+        w_keys[n][0]->callback(key_button_cb, this);
+        w_keys[n][1]->callback(key_button_cb, this);
     }
     players->end();
 
     Fl_Button *w_start = new Fl_Button(10, 450, 280, 30, "Start");
     w_start->callback(start_cb, this);
-    Fl::focus(w_start);
 
     win->end();
     win->show();
