@@ -585,10 +585,32 @@ void gui_fatal(const char *fmt, ...)
     exit(1);
 }
 
+/* Returns the configuration file path.
+
+   On Windows:  %USERPROFILE%\Application Data\zatacka.cfg
+   On UNIX:     $HOME/.zatackrc  (if $HOME is set)
+   Fallback:    zatacka.cfg
+*/
+std::string get_config_path()
+{
+#ifdef WIN32
+    TCHAR dir[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, dir)))
+    {
+        return (std::string)dir + "\\zatacka.cfg";
+    }
+#error TODO
+#else
+    /* Use HOME directory, if possible */
+    char *home = getenv("HOME");
+    if (home != NULL) return (std::string)home + "/.zatackarc";
+#endif
+
+    return "zatacka.cfg";
+}
+
 int main(int argc, char *argv[])
 {
-    const char *cfg_path = "zatacka.cfg";
-
     (void)argc;
     (void)argv;
 
@@ -599,11 +621,12 @@ int main(int argc, char *argv[])
     Fl::visual(FL_DOUBLE|FL_INDEX);
 
     /* Configuration */
+    std::string config_path = get_config_path();
     Config cfg;
-    cfg.load_settings(cfg_path);
+    cfg.load_settings(config_path.c_str());
     do {
         if (!cfg.show_window()) return 0;
-        cfg.save_settings(cfg_path);
+        cfg.save_settings(config_path.c_str());
 
         /* Try to connect to the server */
         g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());

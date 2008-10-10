@@ -7,6 +7,7 @@ General:
 
 Client:
  - proper full screen mode on Windows
+ - use proper config path (getenv("HOME"/.appname on UNIX, and ShGetFolderXXX on Win32)
  - (re)store last-used configuration settings
  - better (anti-aliased?) game rendering
 
