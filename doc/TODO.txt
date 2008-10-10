@@ -7,15 +7,18 @@ General:
 
 Client:
  - proper full screen mode on Windows
- - use proper config path (getenv("HOME"/.appname on UNIX, and ShGetFolderXXX on Win32)
- - (re)store last-used configuration settings
  - better (anti-aliased?) game rendering
+ - don't render clients until they first move [1.1]
 
 Server:
  - more accurate rendering?
    => scale to 2000x2000 resolution
    => draw multiple dots to create more accurate lines
       (Bresenham-style)
+ - hand-picked color palette for better contrast [1.1]
+ - keep player colors [1.1]
+ - kick idle players before game starts [1.1]
+ - server console [1.2]
 
  Potential bug:
   - When a client is disconnected, it may have players active, which are pointed
