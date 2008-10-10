@@ -17,6 +17,10 @@
 #pragma comment(lib, "comctl32.lib")
 #endif
 
+#ifdef WIN32
+#include <shlobj.h>
+#endif
+
 #define CLIENT_FPS 100
 
 class KeyBindings
@@ -599,7 +603,6 @@ std::string get_config_path()
     {
         return (std::string)dir + "\\zatacka.cfg";
     }
-#error TODO
 #else
     /* Use HOME directory, if possible */
     char *home = getenv("HOME");
