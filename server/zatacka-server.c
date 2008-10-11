@@ -95,6 +95,7 @@ typedef struct Client
 {
     /* Set to true only if this client is currently in use */
     bool            in_use;
+    bool            hailed;        /* have we received a HELO? */
     int             protocol;      /* protocol version used by the client */
 
     /* Remote address (TCP only) */
@@ -209,6 +210,7 @@ static void client_broadcast(const void *buf, size_t len, bool reliable)
     {
         Client *cl = &g_clients[n];
         if (!cl->in_use) continue;
+        if (!reliable && !cl->hailed) continue;
         client_send(cl, buf, len, reliable);
     }
 }
@@ -332,7 +334,8 @@ static void handle_packet( Client *cl, unsigned char *buf, size_t len,
 static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
 {
     /* Check if players have already been registered */
-    if (cl->players[0].in_use) return;
+    if (cl->hailed) return;
+    cl->hailed = true;
 
     if (len < 3)
     {
