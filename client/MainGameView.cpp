@@ -130,6 +130,13 @@ void MainGameView::updateTime(double t)
     damageChatText();
 }
 
+void MainGameView::setWarmup(bool value)
+{
+    if (value == warmup) return;
+    warmup = value;
+    damage(1);
+}
+
 void MainGameView::damageChatText()
 {
     int height = 8 + 6*16;
@@ -164,5 +171,14 @@ void MainGameView::draw()
         fl_draw( "Succesfully connected to server!\n"
                  "Please wait for the next round to start.",
                  this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
+    }
+    else
+    if (warmup)
+    {
+        fl_font(FL_HELVETICA, 24);
+        fl_color(FL_WHITE);
+        fl_draw( "Prepare for the next round!\n"
+                "Press movement keys to play.",
+                    this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
     }
 }

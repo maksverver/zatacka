@@ -276,6 +276,34 @@ bool Config::parse_setting(std::string &key, std::string &value, int i, int j)
         return true;
     }
 
+    if (key == "player" && (0 <= i && i < 4) && (j == 0))
+    {
+        if (atoi(value.c_str()) != 0)
+        {
+            for (int n = 0; n < m_num_players; ++n)
+            {
+                if (m_player_index[n] == i) return true; /* already active */
+            }
+            m_player_index[m_num_players++] = i;
+        }
+        else
+        {
+            for (int n = 0; n < m_num_players; ++n)
+            {
+                if (m_player_index[n] == i)
+                {
+                    /* Remove player */
+                    for ( ; n + 1 < m_num_players; ++n)
+                    {
+                        m_player_index[n] = m_player_index[n + 1];
+                    }
+                    --m_num_players;
+                }
+            }
+        }
+        return true;
+    }
+
     return false;
 }
 
@@ -302,7 +330,7 @@ bool Config::load_settings(const char *path)
             }
             key.erase(key.find(':'));
         }
-        
+
         if (parse_setting(key, value, i, j)) res = true;
     }
     return res;
@@ -323,6 +351,14 @@ bool Config::save_settings(const char *path)
             ofs << "keys:" << p << ':' << i << '=' << m_keys[p][i] << '\n';
         }
     }
+    for (int n = 0; n < 4; ++n)
+    {
+        bool active = false;
+        for (int m = 0; m < m_num_players; ++m)
+        {
+            if (m_player_index[m] == n) active = true;
+        }
+        ofs << "player:" << n << '=' << (int)active << '\n';
+    }
     return ofs;
 }
-

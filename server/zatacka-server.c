@@ -67,6 +67,7 @@ typedef struct Player
     /* Move buffer */
     int             timestamp;
     char            moves[MOVE_BACKLOG];
+    bool            has_moved;              /* did player move during warmup? */
 
     /* Player info */
     int             index;
@@ -286,28 +287,32 @@ static void player_kill(Player *pl)
     /* Set player dead */
     pl->dead_since = g_timestamp;
     --g_num_alive;
-    if (g_num_alive <= 1 && g_deadline == -1)
-    {
-        /* End the game after a fixed number of seconds */
-        g_deadline = g_timestamp + VICTORY_TIME;
-    }
 
-    /* Give remaining players a point.
-       NB. if two players die in the same turn, they both get a point from
-           each other's death. */
-    for (int n = 0; n < g_num_players; ++n)
+    if (g_timestamp >= WARMUP)
     {
-        if (g_players[n] == pl) continue;
-        if ( g_players[n]->dead_since == -1 ||
-             g_players[n]->dead_since >= g_timestamp )
+        if (g_num_alive <= 1 && g_deadline == -1)
         {
-            g_players[n]->score_total += 1;
-            g_players[n]->score_moving_sum += 1;
-            g_players[n]->score_history[0] += 1;
+            /* End the game after a fixed number of seconds */
+            g_deadline = g_timestamp + VICTORY_TIME;
         }
-    }
 
-    send_scores();
+        /* Give remaining players a point.
+        NB. if two players die in the same turn, they both get a point from
+            each other's death. */
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            if (g_players[n] == pl) continue;
+            if ( g_players[n]->dead_since == -1 ||
+                g_players[n]->dead_since >= g_timestamp )
+            {
+                g_players[n]->score_total += 1;
+                g_players[n]->score_moving_sum += 1;
+                g_players[n]->score_history[0] += 1;
+            }
+        }
+
+        send_scores();
+    }
 }
 
 static void handle_packet( Client *cl, unsigned char *buf, size_t len,
@@ -498,6 +503,9 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 int a = (m == 2) ? +1 : (m == 3) ? -1 : 0;
                 int v = (pl->timestamp < WARMUP ? 0 : 1);
 
+                /* Register movement during warmup */
+                if (a != 0 && pl->timestamp < WARMUP) pl->has_moved = true;
+
                 if (fp_replay != NULL)
                 {
                     /* Write to trace: time, player, turn, move*/
@@ -510,33 +518,36 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 double nx = pl->x + v*1e-3*MOVE_RATE*cos(pl->a);
                 double ny = pl->y + v*1e-3*MOVE_RATE*sin(pl->a);
 
-                /* First, blank out previous dot */
-                if (pl->prev_hole == 0)
+                if (v > 0)
                 {
-                    field_plot(&g_field, pl->x, pl->y, 0);
-                }
+                    /* First, blank out previous dot */
+                    if (pl->prev_hole == 0)
+                    {
+                        field_plot(&g_field, pl->x, pl->y, 0);
+                    }
 
-                /* Check for out-of-bounds or overlapping dots */
-                if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
-                     field_plot(&g_field,nx, ny, pl->index + 1) != 0 )
-                {
-                    player_kill(pl);
-                }
+                    /* Check for out-of-bounds or overlapping dots */
+                    if ( nx < 0 || nx >= 1 || ny < 0 || ny >= 1 ||
+                        field_plot(&g_field,nx, ny, pl->index + 1) != 0 )
+                    {
+                        player_kill(pl);
+                    }
 
-                /* Redraw previous dot */
-                if (pl->prev_hole == 0)
-                {
-                    field_plot(&g_field, pl->x, pl->y, pl->index + 1);
-                }
+                    /* Redraw previous dot */
+                    if (pl->prev_hole == 0)
+                    {
+                        field_plot(&g_field, pl->x, pl->y, pl->index + 1);
+                    }
 
-                if (pl->hole > 0) field_plot(&g_field,nx, ny, 0);
+                    if (pl->hole > 0) field_plot(&g_field,nx, ny, 0);
 
-                pl->x = nx;
-                pl->y = ny;
+                    pl->x = nx;
+                    pl->y = ny;
 
-                if (pl->prev_hole != 0)
-                {
-                    pl->solid_since = pl->timestamp;
+                    if (pl->prev_hole != 0)
+                    {
+                        pl->solid_since = pl->timestamp;
+                    }
                 }
 
                 pl->prev_hole = pl->hole;
@@ -544,6 +555,9 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             }
 
             ++pl->timestamp;
+
+            /* Kill players that do not move during the warmup period */
+            if (pl->timestamp == WARMUP && !pl->has_moved) player_kill(pl);
 
             unsigned long long rng_next = pl->rng_base*1967773755ull
                                         + pl->rng_carry;
@@ -670,13 +684,14 @@ static void restart_game()
         Player *pl = g_players[n];
 
         /* Reset player state to starting position */
-        pl->dead_since = -1;
-        pl->color = rgb_from_hue((double)pl->index/g_num_players);
-        pl->x = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->y = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->a = 2.0*M_PI*rand()/RAND_MAX;
-        pl->timestamp = 0;
+        pl->timestamp   = 0;
         memset(pl->moves, 0, sizeof(pl->moves));
+        pl->has_moved   = false;
+        pl->dead_since  = -1;
+        pl->color       = rgb_from_hue((double)pl->index/g_num_players);
+        pl->x           = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->y           = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->a           = 2.0*M_PI*rand()/RAND_MAX;
         pl->hole        = 0;
         pl->prev_hole   = 0;
         pl->solid_since = 0;

@@ -28,6 +28,10 @@ public:
     void dot(double x, double y, Fl_Color c);
     void line(double x1, double y1, double x2, double y2, Fl_Color c);
 
+    Fl_Color spriteColor(int n) { return sprites[n].col; };
+    Sprite::SpriteType spriteType(int n) { return sprites[n].type; }
+    const std::string &spriteLabel(int n) { return sprites[n].label; }
+
     void setSprite(int n, double x, double y, double a);
     void setSpriteColor(int n, Fl_Color col);
     void setSpriteType(int n, Sprite::SpriteType);

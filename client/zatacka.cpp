@@ -253,7 +253,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
     if (pos != len) warn("%d extra bytes in STRT packet", len - pos);
 
-    /* Update gameid label & gameview*/
+    /* Update gameid label & gameview */
     g_window->setGameId(g_gameid);
     g_window->resetGameView(g_num_players);
 
@@ -261,12 +261,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
     for (int n = 0; n < g_num_players; ++n)
     {
         gv->setSpriteColor(n, g_players[n].col);
-        gv->setSpriteType(n, Sprite::ARROW);
-        gv->setSpriteLabel(n, g_players[n].name);
+        gv->setSpriteType(n, Sprite::HIDDEN);
+        gv->setSpriteLabel(n, std::string());
         player_reset_prediction(n);
     }
     update_sprites();
     g_window->scoreView()->update(g_players);
+    g_window->gameView()->setWarmup(true);
 }
 
 static void handle_SCOR(unsigned char *buf, size_t len)
@@ -322,6 +323,13 @@ static void player_move(int n, int move)
     {
         g_window->gameView()->setSpriteLabel(n, std::string());
         g_window->gameView()->setSpriteType(n, Sprite::DOT);
+    }
+
+    /* Display sprite during warmup after first move */
+    if ((move == 2 || move == 3) && (pl.timestamp < g_warmup))
+    {
+        g_window->gameView()->setSpriteType(n, Sprite::ARROW);
+        g_window->gameView()->setSpriteLabel(n, g_players[n].name);
     }
 
     /* Change hole making state according to RNG */
@@ -408,6 +416,12 @@ static void forward_to(int timestamp)
             moves[pos] = m;
             player_update_prediction(p, m);
         }
+
+        /* Hide warmup message if client has joined */
+        if (timestamp < g_warmup && (m == 2 || m == 3))
+        {
+            g_window->gameView()->setWarmup(false);
+        }
     }
     g_local_timestamp = timestamp;
 
@@ -456,6 +470,11 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         warn("(MOVE) packet with old timestamp (%d < %d)",
              timestamp, g_last_timestamp);
         return;
+    }
+
+    if (g_last_timestamp < g_warmup && timestamp >= g_warmup)
+    {
+        g_window->gameView()->setWarmup(false);
     }
 
     /* Update estimated server time (at start of the round) */

@@ -8,7 +8,6 @@ General:
 Client:
  - proper full screen mode on Windows
  - better (anti-aliased?) game rendering
- - don't render clients until they first move [1.1]
 
 Server:
  - more accurate rendering?
@@ -17,7 +16,6 @@ Server:
       (Bresenham-style)
  - hand-picked color palette for better contrast [1.1]
  - keep player colors [1.1]
- - kick idle players before game starts [1.1]
  - server console [1.2]
 
  Potential bug:

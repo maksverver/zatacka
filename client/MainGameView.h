@@ -27,6 +27,7 @@ public:
     void appendMessage(const std::string &text, Fl_Color col = FL_WHITE);
     int handleKeyPress(int key);
     void updateTime(double t);
+    void setWarmup(bool value);
 
 protected:
     void damageChatText();
@@ -36,6 +37,7 @@ private:
     bool typing;
     std::string chat_text;
     std::vector<ChatLine> chat_lines;
+    bool warmup;
 };
 
 #endif /* ndef MAIN_GAME_VIEW_H_INCLUDED */
