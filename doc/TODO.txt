@@ -14,9 +14,7 @@ Server:
    => scale to 2000x2000 resolution
    => draw multiple dots to create more accurate lines
       (Bresenham-style)
- - hand-picked color palette for better contrast [1.1]
- - keep player colors [1.1]
- - server console [1.2]
+ - server console [1.1]
 
  Potential bug:
   - When a client is disconnected, it may have players active, which are pointed

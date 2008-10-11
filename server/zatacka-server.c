@@ -54,6 +54,9 @@ typedef int socklen_t;
 
 #define REPLAYDIR           "replay"
 
+#define NUM_COLORS          16
+
+
 struct RGB
 {
     unsigned char r, g, b;
@@ -125,16 +128,25 @@ static int g_num_alive;         /* Number of people still alive */
 static unsigned g_gameid;
 static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
-unsigned char g_field[1000][1000];
+static unsigned char g_field[1000][1000];
+static FILE *fp_replay;         /* Record replay to this file */
 
-FILE *fp_replay;                /* Record replay to this file */
+struct RGB g_colors[NUM_COLORS] = {
+    { 255,   0,   0 }, {   0, 160, 160 }, { 240, 240,   0 }, {   0,   0, 255 },
+    {   0, 255,   0 }, { 255,   0, 255 }, { 255, 160,   0 }, { 128,   0, 192 },
+    { 192, 192, 192 }, { 128, 255, 128 }, {   0, 240, 240 }, { 160,  40,   0 },
+    { 128, 128,   0 }, { 224,   0, 112 }, { 255, 128, 128 }, { 128, 128, 128 } };
+
 
 /*
     Function prototypes
 */
 
-/* Convert a hue (0 <= hue < 1) to RGB */
-static struct RGB rgb_from_hue(double hue);
+/* Three-way comparison of two RGB colors */
+static int rgb_cmp(const struct RGB *c, const struct RGB *d);
+
+/* Determine if the given RGB color is black (default initialized) */
+static bool rgb_black(const struct RGB *c);
 
 /* Disconnect a client (sending the given reason, if possible) */
 static void client_disconnect(Client *cl, const char *reason);
@@ -173,37 +185,19 @@ int main(int argc, char *argv[]);
 
 /* Function definitions */
 
-static struct RGB rgb_from_hue(double hue)
+static int rgb_cmp(const struct RGB *c, const struct RGB *d)
 {
-    struct RGB res;
-
-    if (hue < 0 || hue >= 1)
-    {
-        res.r = res.g = res.b = 128;
-    }
-    else
-    if (hue < 1/3.0)
-    {
-        res.r = (int)(255*3.0*(1/3.0 - hue));
-        res.g = (int)(255*3.0*(hue));
-        res.b = 0;
-    }
-    else
-    if (hue < 2/3.0)
-    {
-        res.r = 0;
-        res.g = (int)(255*3.0*(2/3.0 - hue));
-        res.b = (int)(255*3.0*(hue - 1/3.0));
-    }
-    else
-    {
-        res.r = (int)(255*3.0*(hue - 2/3.0));
-        res.g = 0;
-        res.b = (int)(255*3.0*(1.0 - hue));
-    }
-
-    return res;
+    if (c->r != d->r) return c->r - d->r;
+    if (c->g != d->g) return c->g - d->g;
+    if (c->b != d->b) return c->b - d->b;
+    return 0;
 }
+
+static bool rgb_black(const struct RGB *c)
+{
+    return c->r + c->g + c->b == 0;
+}
+
 
 static void client_broadcast(const void *buf, size_t len, bool reliable)
 {
@@ -688,7 +682,6 @@ static void restart_game()
         memset(pl->moves, 0, sizeof(pl->moves));
         pl->has_moved   = false;
         pl->dead_since  = -1;
-        pl->color       = rgb_from_hue((double)pl->index/g_num_players);
         pl->x           = 0.02 + 0.96*rand()/RAND_MAX;
         pl->y           = 0.02 + 0.96*rand()/RAND_MAX;
         pl->a           = 2.0*M_PI*rand()/RAND_MAX;
@@ -697,6 +690,34 @@ static void restart_game()
         pl->solid_since = 0;
         pl->rng_base    = g_gameid ^ n;
         pl->rng_carry   = 0;
+    }
+
+    /* Assign player colors */
+    {
+        int users[NUM_COLORS] = { };
+
+        for (int c = 0; c < NUM_COLORS; ++c)
+        {
+            for (int p = 0; p < g_num_players; ++p)
+            {
+                users[c] += rgb_cmp(&g_players[p]->color, &g_colors[c]) == 0;
+            }
+        }
+
+        for (int p = 0; p < g_num_players; ++p)
+        {
+            struct RGB *col = &g_players[p]->color;
+            if (rgb_black(col))
+            {
+                int best_c = 0;
+                for (int c = 1; c < NUM_COLORS; ++c)
+                {
+                    if (users[c] < users[best_c]) best_c = c;
+                }
+                *col = g_colors[best_c];
+                users[best_c] += 1;
+            }
+        }
     }
 
     {
