@@ -5,17 +5,21 @@
 extern "C" {
 #endif
 
-typedef unsigned char (Field)[1000][1000];
+#define FIELD_SIZE (1000)
 
-/* Plot a dot at the given position in the given color.
+typedef unsigned char (Field)[FIELD_SIZE][FIELD_SIZE];
+
+/* Draw a line segment with from (x1,y1) to (x2,y2), with starting angle `a1`
+   and ending angle `a2`, using color `col` and the default thickness.
    Returns the maximum value of the colors of the overlapping pixels,
-   or 256 if the dot falls(partially) outside the field. */
-int field_plot(Field *field, double x, double y, int col);
+   or 256 if the segment falls (partially) outside the field.
 
-/* Returns the maximum value of the colors of the overlapping pixels,
-   or 256 if the dot falls(partially outside the field.
-   Does not update the field. */
-int field_test(Field *field, double x, double y);
+   If col is set to -1, no lines are drawn.
+*/
+int field_line( Field *field,
+                double x1, double y1, double a1,
+                double x2, double y2, double a2,
+                int col );
 
 #ifdef __cplusplus
 }

@@ -293,25 +293,29 @@ static void player_advance(int n, int turn_dir)
 {
     Player &pl = g_players[n];
 
+    int v = (pl.timestamp < g_warmup) ? 0 : 1;
+
     /* First turn */
-    pl.a += turn_dir*2.0*M_PI/g_turn_rate;
+    double na = pl.a + turn_dir*2.0*M_PI/g_turn_rate;
+    double nx = pl.x + v*1e-3*g_move_rate*cos(na);
+    double ny = pl.y + v*1e-3*g_move_rate*sin(na);
 
     /* Then move ahead */
-    if (pl.timestamp >= g_warmup)
+    if (v > 0 && pl.hole == -1)
     {
-        double nx = pl.x + 1e-3*g_move_rate*cos(pl.a);
-        double ny = pl.y + 1e-3*g_move_rate*sin(pl.a);
-        if (pl.hole == -1)
-        {
-            g_window->gameView()->line(pl.x, pl.y, nx, ny, pl.col);
-        }
-        pl.x = nx;
-        pl.y = ny;
+        g_window->gameView()->line(pl.x, pl.y, nx, ny, pl.col);
     }
 
 #ifdef DEBUG
-    if (pl.hole <= 0) field_plot(&g_field, pl.x, pl.y, n + 1);
+    if (pl.hole == -1)
+    {
+        field_line(&g_field, pl.x, pl.y, pl.a, nx, ny, na, n + 1);
+    }
 #endif
+
+    pl.x = nx;
+    pl.y = ny;
+    pl.a = na;
 }
 
 static void player_move(int n, int move)

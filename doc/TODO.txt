@@ -8,12 +8,10 @@ General:
 Client:
  - proper full screen mode on Windows
  - better (anti-aliased?) game rendering
+   based on server reference rendering
 
 Server:
- - more accurate rendering?
-   => scale to 2000x2000 resolution
-   => draw multiple dots to create more accurate lines
-      (Bresenham-style)
+ - more accurate rendering (in progress)
  - server console [1.1]
 
  Potential bug:
