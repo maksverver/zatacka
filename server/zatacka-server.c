@@ -54,6 +54,9 @@ typedef int socklen_t;
 
 #define REPLAYDIR           "replay"
 
+#define GAMEMODE_NORMAL        (0)
+#define GAMEMODE_GATEGRABBER   (1)
+
 struct RGB
 {
     unsigned char r, g, b;
@@ -81,9 +84,17 @@ typedef struct Player
     int             score_moving_sum;
     int             score_history[SCORE_HISTORY];
 
+    int             hole_score_total;
+    int             hole_score_moving_sum;
+    int             hole_score_history[SCORE_HISTORY];
+
     /* Hole creation */
     int             hole, prev_hole;
     int             solid_since;
+
+    /* Crossing holes */
+    int             hole_id;        /* identifier of hole being made */
+    int             cross_hole_id;  /* identifier of hole being crossed */
 
     /* Multiply-with-carry RNG for this player
        (used to determine random state transitions) */
@@ -126,6 +137,10 @@ static unsigned g_gameid;
 static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
 unsigned char g_field[1000][1000];
+static int g_new_hole_id;       /* ID of the next hole to be created */
+unsigned char g_field_holes[1000][1000];    /* Bitmap to track created holes */
+
+static int g_game_mode = GAMEMODE_GATEGRABBER;
 
 FILE *fp_replay;                /* Record replay to this file */
 
@@ -498,6 +513,8 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     pl->hole = HOLE_LENGTH_MIN +
                                (pl->rng_base/HOLE_PROBABILITY)
                                % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
+                    pl->hole_id = g_new_hole_id;
+                    g_new_hole_id = (g_new_hole_id)%255 + 1;    // skips zero
                 }
 
                 int a = (m == 2) ? +1 : (m == 3) ? -1 : 0;
@@ -539,7 +556,40 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                         field_plot(&g_field, pl->x, pl->y, pl->index + 1);
                     }
 
-                    if (pl->hole > 0) field_plot(&g_field,nx, ny, 0);
+                    /* Score points for going through holes */
+
+                    /* If currently making a hole, blank out previous dot on crossing bitmap */
+                    if (pl->prev_hole > 0)
+                    {
+                        field_plot(&g_field_holes, pl->x, pl->y, 0);
+                    }
+
+                    /* Check if the hole crossing id has changed */
+                    int id = field_test(&g_field_holes, nx, ny);
+                    if (id < 256 && id != pl->cross_hole_id)
+                    {
+                        if (id > 0)
+                        {
+                            pl->hole_score_total += 1;
+                            pl->hole_score_moving_sum += 1;
+                            pl->hole_score_history[0] += 1;
+                            send_scores();
+                        }
+                        pl->cross_hole_id = id;
+                    }
+
+                    /* Redraw previous dot on crossing bitmap */
+                    if (pl->prev_hole > 0)
+                    {
+                        field_plot(&g_field_holes, pl->x, pl->y, pl->hole_id);
+                    }
+
+                    /* Draw hole */
+                    if (pl->hole > 0)
+                    {
+                        field_plot(&g_field, nx, ny, 0);
+                        field_plot(&g_field_holes, nx, ny, pl->hole_id);
+                    }
 
                     pl->x = nx;
                     pl->y = ny;
@@ -614,6 +664,7 @@ static void restart_game()
     g_time_start = time_now();
     g_timestamp = 0;
     g_deadline = -1;
+    g_new_hole_id = 1;
 
     if (g_num_clients == 0) return;
     if (g_num_players > 0)
@@ -640,15 +691,19 @@ static void restart_game()
     for (int n = 0; n < g_num_players; ++n)
     {
         Player *pl = g_players[n];
-        pl->score_moving_sum -= pl->score_history[SCORE_HISTORY - 1];
+        pl->score_moving_sum      -= pl->score_history[SCORE_HISTORY - 1];
+        pl->hole_score_moving_sum -= pl->hole_score_history[SCORE_HISTORY - 1];
         for (int s = SCORE_HISTORY - 1; s > 0; --s)
         {
-            pl->score_history[s] = pl->score_history[s - 1];
+            pl->score_history[s]      = pl->score_history[s - 1];
+            pl->hole_score_history[s] = pl->hole_score_history[s - 1];
         }
         pl->score_history[0] = 0;
+        pl->hole_score_history[0] = 0;
     }
 
     memset(g_field, 0, sizeof(g_field));
+    memset(g_field_holes, 0, sizeof(g_field_holes));
 
     /* Find players for the next game */
     g_num_players = 0;
@@ -684,19 +739,21 @@ static void restart_game()
         Player *pl = g_players[n];
 
         /* Reset player state to starting position */
-        pl->timestamp   = 0;
+        pl->timestamp       = 0;
         memset(pl->moves, 0, sizeof(pl->moves));
-        pl->has_moved   = false;
-        pl->dead_since  = -1;
-        pl->color       = rgb_from_hue((double)pl->index/g_num_players);
-        pl->x           = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->y           = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->a           = 2.0*M_PI*rand()/RAND_MAX;
-        pl->hole        = 0;
-        pl->prev_hole   = 0;
-        pl->solid_since = 0;
-        pl->rng_base    = g_gameid ^ n;
-        pl->rng_carry   = 0;
+        pl->has_moved       = false;
+        pl->dead_since      = -1;
+        pl->color           = rgb_from_hue((double)pl->index/g_num_players);
+        pl->x               = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->y               = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->a               = 2.0*M_PI*rand()/RAND_MAX;
+        pl->hole            = 0;
+        pl->prev_hole       = 0;
+        pl->solid_since     = 0;
+        pl->rng_base        = g_gameid ^ n;
+        pl->rng_carry       = 0;
+        pl->hole_id         = 0;
+        pl->cross_hole_id   = 0;
     }
 
     {
@@ -790,19 +847,40 @@ static void send_scores()
     size_t pos = 0;
 
     packet[pos++] = MRSC_SCOR;
+
     for (int n = 0; n < g_num_players; ++n)
     {
-        packet[pos++] = g_players[n]->score_total >> 8;
-        packet[pos++] = g_players[n]->score_total&255;
-        packet[pos++] = g_players[n]->score_history[0] >> 8;
-        packet[pos++] = g_players[n]->score_history[0]&255;
-        packet[pos++] = g_players[n]->score_moving_sum >> 8;
-        packet[pos++] = g_players[n]->score_moving_sum&255;
+        int tot, cur, avg;
+
+        switch (g_game_mode)
+        {
+        case GAMEMODE_NORMAL:
+            tot = g_players[n]->score_total;
+            cur = g_players[n]->score_history[0];
+            avg = g_players[n]->score_moving_sum;
+            break;
+
+        case GAMEMODE_GATEGRABBER:
+            tot = g_players[n]->hole_score_total;
+            cur = g_players[n]->hole_score_history[0];
+            avg = g_players[n]->hole_score_moving_sum;
+            break;
+
+        default:
+            fatal("invalid game mode: %d", g_game_mode);
+        }
+
+        packet[pos++] = tot >> 8;
+        packet[pos++] = tot & 255;
+        packet[pos++] = cur >> 8;
+        packet[pos++] = cur & 255;
+        packet[pos++] = avg >> 8;
+        packet[pos++] = avg & 255;
         packet[pos++] = 0;
         packet[pos++] = 0;
     }
-    client_broadcast(packet, pos, true);
 
+    client_broadcast(packet, pos, true);
 }
 
 static void do_frame()
