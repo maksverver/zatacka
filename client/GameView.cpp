@@ -71,7 +71,8 @@ void GameView::line( double px1, double py1, double pa1,
     }
     fl_end_offscreen();
 
-    damage(this->x() + x1, this->y() + h - y2, x2 - x1, y2 - y1, 1);
+//    damage(this->x() + x1, this->y() + h - y2, x2 - x1, y2 - y1, 1);
+    damage(1);
 }
 
 void GameView::draw()
