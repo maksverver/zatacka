@@ -3,6 +3,58 @@
 #include <algorithm>
 #include <sstream>
 
+class ScoreWidget : public Fl_Widget
+{
+public:
+    ScoreWidget(int x, int y, int w, int h, const Player &pl);
+    void draw();
+
+private:
+    Player pl;
+};
+
+ScoreWidget::ScoreWidget(int x, int y, int w, int h, const Player &pl)
+    : Fl_Widget(x, y, w, h), pl(pl)
+{
+}
+
+void ScoreWidget::draw()
+{
+    char buf[32];
+    int x = this->x(), y = this->y(), w = this->w(), h = this->h();
+
+    /* Draw box */
+    fl_draw_box(FL_RSHADOW_BOX, x, y, w, h, pl.col);
+
+    /* Draw player name */
+    fl_font(FL_HELVETICA, 20);
+    fl_color(FL_WHITE);
+    fl_draw( pl.name.c_str(), x + 15, y + 2, w - 75, h - 2,
+             (Fl_Align)(FL_ALIGN_LEFT | FL_ALIGN_CLIP), 0, 0 );
+
+    /* Draw main score */
+    fl_font(FL_HELVETICA, 24);
+    fl_color(FL_WHITE);
+    sprintf(buf, "%d", pl.score_avg);
+    fl_draw(buf, x + w - 30, y + 2, 20, h - 2, FL_ALIGN_RIGHT, 0, 0);
+
+    /* Draw total and current-round score */
+    fl_font(FL_HELVETICA, 12);
+    fl_color(FL_WHITE);
+    sprintf(buf, "%d", pl.score_cur);
+    fl_draw(buf, x + w - 55, y + 5, 17, 20, FL_ALIGN_RIGHT, 0, 0);
+    sprintf(buf, "%d", pl.score_tot);
+    fl_draw(buf, x + w - 55, y + 17, 17, 20, FL_ALIGN_RIGHT, 0, 0);
+
+    /* Draw hole score */
+    fl_color(FL_BLACK);
+    for (int n = 0; n < pl.score_holes; ++n)
+    {
+        fl_pie(x + w - 60 - 10*n, y + 5, 9, 9, 0, 360);
+    }
+}
+
+
 /* Compares to players by:
     - highest average score (first)
     - current round's score (second)
@@ -46,75 +98,14 @@ void ScoreView::update(std::vector<Player> &players)
     /* Remove widgets */
     clear();
 
-    /* Allocate strings */
-    labels_name.clear();
-    labels_score_cur.clear();
-    labels_score_tot.clear();
-    labels_score_avg.clear();
-    for (size_t n = 0; n < players.size(); ++n)
-    {
-        labels_name.push_back("  " + ordered_players[n]->name);
-        labels_score_cur.push_back(stringify(ordered_players[n]->score_cur));
-        labels_score_tot.push_back(stringify(ordered_players[n]->score_tot));
-        labels_score_avg.push_back(stringify(ordered_players[n]->score_avg));
-
-        /* HACK: Adjust name label so it fits in the box */
-        fl_font(FL_HELVETICA, 20);
-        while (!labels_name.back().empty())
-        {
-            int w = 0, h = 0;
-            fl_measure(labels_name.back().c_str(), w, h, 0);
-            if (w < this->w() - 60) break;
-            labels_name.back().erase(labels_name.back().end() - 1);
-        }
-    }
-
     /* Recreate widgets */
     begin();
     int x = this->x() + 5, y = this->y() + 5, w = this->w() - 10, h = 40;
     for (size_t n = 0; n < players.size(); ++n)
     {
-        Fl_Color color = ordered_players[n]->col;
-
-        /* Main box (with name) */
-        Fl_Box *box = new Fl_Box(x, y, w, h);
-        box->box(FL_RSHADOW_BOX);
-        box->color(color);
-        box->label(labels_name[n].c_str());
-        box->labelfont(FL_HELVETICA);
-        box->labelsize(20);
-        box->labelcolor(FL_WHITE);
-        box->align(FL_ALIGN_INSIDE | FL_ALIGN_LEFT);
-
-        /* Main score box */
-        box = new Fl_Box(x + w - 30, y + 2, 25, h);
-        box->color(color);
-        box->label(labels_score_avg[n].c_str());
-        box->labelfont(FL_HELVETICA);
-        box->labelsize(24);
-        box->labelcolor(FL_WHITE);
-        box->align(FL_ALIGN_INSIDE | FL_ALIGN_RIGHT);
-
-        /* Sub score boxes */
-        box = new Fl_Box(x + w - 50, y + 5, 17, 20);
-        box->color(color);
-        box->label(labels_score_cur[n].c_str());
-        box->labelfont(FL_HELVETICA);
-        box->labelsize(12);
-        box->labelcolor(FL_WHITE);
-        box->align(FL_ALIGN_INSIDE | FL_ALIGN_RIGHT);
-
-        box = new Fl_Box(x + w - 50, y + 17, 17, 20);
-        box->color(color);
-        box->label(labels_score_tot[n].c_str());
-        box->labelfont(FL_HELVETICA);
-        box->labelsize(12);
-        box->labelcolor(FL_WHITE);
-        box->align(FL_ALIGN_INSIDE | FL_ALIGN_RIGHT);
-
+        new ScoreWidget(x, y, w, h, *ordered_players[n]);
         y += 50;
     }
-
     end();
     redraw();
 }

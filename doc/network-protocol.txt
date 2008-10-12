@@ -56,7 +56,8 @@ Reliable packets: (server->client)
             2 bytes  total score
             2 bytes  score this game
             2 bytes  score over last 10 games
-            2 bytes  reserved (0)
+            1 byte   hole score
+            1 bytes  reserved (0)
 
 Unreliable packets: (client->server)
  128 Moves

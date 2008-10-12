@@ -283,6 +283,10 @@ static void handle_SCOR(unsigned char *buf, size_t len)
         g_players[n].score_tot = 256*buf[pos + 0] + buf[pos + 1];
         g_players[n].score_cur = 256*buf[pos + 2] + buf[pos + 3];
         g_players[n].score_avg = 256*buf[pos + 4] + buf[pos + 5];
+        if (g_players[n].score_holes != buf[pos + 6])
+        {
+            g_players[n].score_holes = buf[pos + 6];
+        }
         pos += 8;
     }
 

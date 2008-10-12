@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,7 @@ typedef int socklen_t;
 #define MAX_CLIENTS           (64)
 #define SERVER_FPS            (30)
 #define MOVE_BACKLOG          (60)
+#define MOVE_SYNCLOG          (40)
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
@@ -45,7 +47,7 @@ typedef int socklen_t;
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY      (60)
 #define HOLE_LENGTH_MIN        (2)
-#define HOLE_LENGTH_MAX        (6)
+#define HOLE_LENGTH_MAX        (7)
 #define HOLE_COOLDOWN         (10)
 
 #define VICTORY_TIME        (3*SERVER_FPS)
@@ -83,10 +85,13 @@ typedef struct Player
     int             score_total;
     int             score_moving_sum;
     int             score_history[SCORE_HISTORY];
+    int             score_holes;
 
     /* Hole creation */
-    int             hole;
-    int             solid_since;
+    int             hole;           /* remaining length of hole (in frames) */
+    int             solid_since;    /* timestamp after last hole */
+    int             my_holeid;      /* id of current hole being created */
+    int             cross_holeid;   /* id of hole being crossed */
 
     /* Multiply-with-carry RNG for this player
        (used to determine random state transitions) */
@@ -125,10 +130,12 @@ static int g_deadline;          /* Game ends at this time */
 static int g_num_clients;       /* Number of connected clients */
 static int g_num_players;       /* Number of people in the current game */
 static int g_num_alive;         /* Number of people still alive */
-static unsigned g_gameid;
+static unsigned g_gameid;       /* Game identifier (also used as random seed) */
+static unsigned g_num_holes;    /* Number of holes created */
 static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
 static unsigned char g_field[1000][1000];
+static unsigned char g_holes[1000][1000];
 static FILE *fp_replay;         /* Record replay to this file */
 
 struct RGB g_colors[NUM_COLORS] = {
@@ -160,6 +167,9 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable);
 /* Kill a player */
 static void player_kill(Player *p);
 
+/* Send a formatted server message */
+static void message(const char *fmt, ...);
+
 /* Network handling */
 static void handle_packet( Client *cl,
                            unsigned char *buf, size_t len, bool reliable );
@@ -170,7 +180,7 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
 /* Restart the game (called when all players have died) */
 static void restart_game();
 
-/* Send scores to all client */
+/* Send scores to all clients */
 static void send_scores();
 
 /* Process a server frame. */
@@ -270,6 +280,20 @@ static void client_disconnect(Client *cl, const char *reason)
     close(cl->fd_stream);
 }
 
+static void message(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    unsigned char packet[MAX_PACKET_LEN];
+    packet[0] = MRSC_MESG;
+    packet[1] = 0;
+    vsnprintf((char*)packet + 2, sizeof(packet) - 2, fmt, ap);
+    client_broadcast(packet, 2 + strlen((char*)packet + 2), true);
+
+    va_end(ap);
+}
+
 static void player_kill(Player *pl)
 {
     assert(pl->in_use);
@@ -279,7 +303,7 @@ static void player_kill(Player *pl)
     info("player %d died.", pl->index);
 
     /* Set player dead */
-    pl->dead_since = g_timestamp;
+    pl->dead_since = pl->timestamp;
     --g_num_alive;
 
     if (g_timestamp >= WARMUP)
@@ -492,6 +516,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     pl->hole = HOLE_LENGTH_MIN +
                                (pl->rng_base/HOLE_PROBABILITY)
                                % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
+                    pl->my_holeid = 1 + (g_num_holes++)%255;
                 }
 
                 int a = (m == 2) ? +1 : (m == 3) ? -1 : 0;
@@ -520,11 +545,27 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                                           pl->x, pl->y, pl->a, 0, NULL );
 
                     /* Fill and test new line segment */
-                    int col = pl->hole > 0 ? -1 : pl->index + 1;
                     if ( field_line( &g_field, pl->x, pl->y, pl->a, nx, ny, na,
-                                     col, NULL ) != 0 )
+                                     pl->hole > 0 ? -1 : pl->index + 1, NULL )
+                         != 0 )
                     {
                         player_kill(pl);
+                    }
+
+                    /* Detect hole crossing */
+                    field_line( &g_holes, pl->x, pl->y, pl->a,
+                                          pl->x, pl->y, pl->a, 0, NULL );
+                    int holeid = field_line(
+                        &g_holes, pl->x, pl->y, pl->a, nx, ny, na,
+                        (pl->hole > 0 ? pl->my_holeid : -1), NULL );
+                    if (holeid < 256 && holeid != pl->cross_holeid)
+                    {
+                        if (pl->cross_holeid != 0)
+                        {
+                            pl->score_holes += 1;
+                            send_scores();
+                        }
+                        pl->cross_holeid = holeid;
                     }
                 }
 
@@ -631,9 +672,8 @@ static void restart_game()
             pl->score_history[s] = pl->score_history[s - 1];
         }
         pl->score_history[0] = 0;
+        pl->score_holes = 0;
     }
-
-    memset(g_field, 0, sizeof(g_field));
 
     /* Find players for the next game */
     g_num_players = 0;
@@ -663,6 +703,10 @@ static void restart_game()
                ((rand()&255) <<  8) |
                ((rand()&255) <<  0);
 
+    memset(g_field, 0, sizeof(g_field));
+    memset(g_holes, 0, sizeof(g_holes));
+    g_num_holes = 0;
+
     /* Initialize players */
     for (int n = 0; n < g_num_players; ++n)
     {
@@ -678,6 +722,8 @@ static void restart_game()
         pl->a               = 2.0*M_PI*rand()/RAND_MAX;
         pl->hole            = 0;
         pl->solid_since     = 0;
+        pl->my_holeid       = 0;
+        pl->cross_holeid    = 0;
         pl->rng_base        = g_gameid ^ n;
         pl->rng_carry       = 0;
     }
@@ -816,7 +862,7 @@ static void send_scores()
         packet[pos++] = cur & 255;
         packet[pos++] = avg >> 8;
         packet[pos++] = avg & 255;
-        packet[pos++] = 0;
+        packet[pos++] = g_players[n]->score_holes;
         packet[pos++] = 0;
     }
 
@@ -843,8 +889,9 @@ static void do_frame()
 
         int backlog = g_timestamp - g_players[n]->timestamp;
         assert(backlog >= 0);
-        if (backlog >= MOVE_BACKLOG)
+        if (backlog >= MOVE_SYNCLOG)
         {
+            message("Killed %s: client out-of-sync!", g_players[n]->name);
             player_kill(pl);
         }
     }

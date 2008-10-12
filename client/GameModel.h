@@ -10,7 +10,7 @@ struct Player
         : col(), x(), y(), a(), timestamp(), last_move(),
           px(), py(), pa(), pt(),
           dead(), hole(), solid_since(), name(),
-          score_cur(), score_tot(), score_avg(),
+          score_cur(), score_tot(), score_avg(), score_holes(),
           rng_base(), rng_carry() { };
 
     Fl_Color    col;            /* color */
@@ -23,9 +23,10 @@ struct Player
     int         hole;           /* generating a hole */
     int         solid_since;    /* earliest timestamp after last hole */
     std::string name;           /* display name */
-    int         score_cur;      /* score this round*/
+    int         score_cur;      /* score this round */
     int         score_tot;      /* total score */
     int         score_avg;      /* moving average */
+    int         score_holes;    /* number of holes passed through */
 
     /* Multiply-with-carry RNG for this player
        (used to determine random state transitions) */
