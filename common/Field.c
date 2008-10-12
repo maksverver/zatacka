@@ -1,5 +1,6 @@
 #include "Field.h"
 #include <stdbool.h>
+#include <stdlib.h>
 #include <math.h>
 
 typedef struct Point
@@ -30,7 +31,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
         if (pts[n].y > y2) y2 = pts[n].y;
     }
 
-    if (y1 < 0 || y2 >= 1000) return 256;
+    if (y1 < 0 || y2 >= FIELD_SIZE) return 256;
 
     /* Draw scanlines bounded by polygon */
     for (y = y1; y <= y2; ++y)
@@ -72,7 +73,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
             *sx = p->x + (q->x - p->x)*(y - p->y)/(q->y - p->y);
         }
 
-        if (x1 < 0 || x2 >= 1000) return 256;
+        if (x1 < 0 || x2 >= FIELD_SIZE) return 256;
 
         /* Check for overlapping pixels */
         if (y > y1 && y < y2)
@@ -96,7 +97,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
 int field_line( Field *field,
                 double x1, double y1, double a1,
                 double x2, double y2, double a2,
-                int col )
+                int col, Rect *rect )
 {
     double th = 7.0;    /* thickness */
 
@@ -112,6 +113,26 @@ int field_line( Field *field,
           (int)(FIELD_SIZE*y2 + 0.5 + 0.5*th*dy2) },
         { (int)(FIELD_SIZE*x2 + 0.5 - 0.5*th*dx2),
           (int)(FIELD_SIZE*y2 + 0.5 - 0.5*th*dy2) } };
+
+    if (rect != NULL)
+    {
+        int n;
+        rect->x1 = rect->y1 = FIELD_SIZE;
+        rect->x2 = rect->y2 = 0;
+        for (n = 0; n < 4; ++n)
+        {
+            if (pts[n].x < rect->x1) rect->x1 = pts[n].x;
+            if (pts[n].x > rect->x2) rect->x2 = pts[n].x;
+            if (pts[n].y < rect->y1) rect->y1 = pts[n].y;
+            if (pts[n].y > rect->y2) rect->y2 = pts[n].y;
+        }
+        rect->x2 += 1;
+        rect->y2 += 1;
+        if (rect->x1 < 0) rect->x1 = 0;
+        if (rect->y1 < 0) rect->y1 = 0;
+        if (rect->x2 >= FIELD_SIZE) rect->x2 = 0;
+        if (rect->y2 >= FIELD_SIZE) rect->y2 = 0;
+    }
 
     return draw_poly(field, pts, 4, col);
 }

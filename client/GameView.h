@@ -25,8 +25,9 @@ public:
     GameView(int x, int y, int w, int h);
     ~GameView();
 
-    void dot(double x, double y, Fl_Color c);
-    void line(double x1, double y1, double x2, double y2, Fl_Color c);
+    void line( double x1, double y1, double a1,
+               double x2, double y2, double a2,
+               int n );
 
     Fl_Color spriteColor(int n) { return sprites[n].col; };
     Sprite::SpriteType spriteType(int n) { return sprites[n].type; }
@@ -41,6 +42,8 @@ public:
     void setSprites(int count);
     int getSprites() { return (int)sprites.size(); }
 
+    bool writeFieldBitmap(const char *path);
+
 protected:
     void useOffscreen();
     void draw();
@@ -50,6 +53,7 @@ private:
     bool offscr_created;
     Fl_Offscreen offscr;
     std::vector<Sprite> sprites;
+    unsigned char field[1000][1000];
 };
 
 #endif /* ndef GAME_VIEW_H_INCLUDED */

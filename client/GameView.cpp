@@ -1,14 +1,44 @@
 #include "GameView.h"
 #include <algorithm>
+#include <string.h>
 
 GameView::GameView(int x, int y, int w, int h)
     : Fl_Widget(x, y, w, h), offscr_created(false)
 {
+    memset(field, 0, sizeof(field));
 }
 
 GameView::~GameView()
 {
     if (offscr_created) fl_delete_offscreen(offscr);
+}
+
+void GameView::line( double px1, double py1, double pa1,
+                     double px2, double py2, double pa2,
+                     int n )
+{
+    Rect r;
+    field_line(&field, px1, py1, pa1, px2, py2, pa2, n + 1, &r);
+
+    int w = this->w(), h = this->h();
+    int x1 = r.x1*w/FIELD_SIZE, x2 = r.x2*w/FIELD_SIZE + 1;
+    int y1 = r.y1*h/FIELD_SIZE, y2 = r.y2*h/FIELD_SIZE + 1;
+
+    fl_begin_offscreen(offscr);
+    fl_color(sprites[n].col);
+    for (int y = y1; y < y2; ++y)
+    {
+        for (int x = x1; x < x2; ++x)
+        {
+            if (field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
+            {
+                fl_point(x, h - 1 - y);
+            }
+        }
+    }
+    fl_end_offscreen();
+
+    damage(this->x() + x1, this->y() + h - 1 - y2, x2 - x1, y2 - y1, 1);
 }
 
 void GameView::draw()
@@ -64,16 +94,6 @@ void GameView::draw()
             fl_vertex(-10, -7);
             fl_end_polygon();
             fl_pop_matrix();
-            /*
-            int r = (int)ceil(0.004*this->w());
-            int ix = x() + sprites[n].x - r;
-            int iy = x() + sprites[n].y - r;
-            int iw = 2*r + 1;
-            int ih = 2*r + 1;
-
-            fl_color(sprites[n].col);
-            fl_pie(ix, iy, iw, ih, 0, 360);
-            */
         }
 
         if (!sprites[n].label.empty())
@@ -89,35 +109,9 @@ void GameView::draw()
     fl_pop_clip();
 }
 
-void GameView::dot(double x, double y, Fl_Color c)
-{
-    int r = (int)ceil(0.003*this->w());
-    int ix = (int)(this->w()*x) - r;
-    int iy = (int)(this->h()*(1.0 - y)) - 1 - r;
-    int iw = 2*r + 1;
-    int ih = 2*r + 1;
-
-    fl_begin_offscreen(offscr);
-    fl_color(c);
-    fl_pie(ix, iy, iw, ih, 0, 360);
-    fl_end_offscreen();
-    damage(1, this->x() + ix, this->y() + iy, iw, ih);
-}
-
-void GameView::line(double x1, double y1, double x2, double y2, Fl_Color c)
-{
-    double dx = (x2 - x1)/4, dy = (y2 - y1)/4;
-    for (int n = 0; n < 5; ++n)
-    {
-        dot(x1, y1, c);
-        x1 += dx;
-        y1 += dy;
-    }
-}
-
 void GameView::damageSprite(int n)
 {
-    damage(1, x() + sprites[n].x - 12, y() + sprites[n].y - 12, 24, 24);
+    damage(1, x() + sprites[n].x - 16, y() + sprites[n].y - 16, 32, 32);
 
     if (!sprites[n].label.empty())
     {
@@ -126,7 +120,6 @@ void GameView::damageSprite(int n)
         fl_measure(sprites[n].label.c_str(), w, h, 0);
         damage(1, x() + sprites[n].x - w/2 - 4, y() + sprites[n].y + 6, w + 8, 24);
     }
-
 }
 
 void GameView::setSprite(int n, double x, double y, double a)
@@ -169,6 +162,7 @@ void GameView::clear()
         fl_rectf(0, 0, w(), h());
         fl_end_offscreen();
     }
+    memset(field, 0, sizeof(field));
     damage(1);
 }
 
@@ -179,4 +173,9 @@ void GameView::setSprites(int count)
         if (sprites[n].visible()) damageSprite(n);
     }
     sprites.resize(count);
+}
+
+bool GameView::writeFieldBitmap(const char *path)
+{
+    return bmp_write(path, &field[0][0], 1000, 1000);
 }

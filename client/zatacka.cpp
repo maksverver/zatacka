@@ -64,7 +64,6 @@ std::vector<int>         g_my_indices;
 std::vector<Player> g_players;  /* all players in the game */
 
 #ifdef DEBUG
-unsigned char g_field[1000][1000];
 FILE *fp_trace;
 #endif
 
@@ -161,9 +160,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
     {
         char path[32];
         sprintf(path, "bmp/field-%08x.bmp", g_gameid);
-        if (bmp_write(path, &g_field[0][0], 1000, 1000))
+        if (g_window->gameView()->writeFieldBitmap(path))
         {
             info("Field dumped to file \"%s\"", path);
+        }
+        else
+        {
+            info("Could not write field to file \"%s\"!", path);
         }
     }
 #endif
@@ -200,9 +203,6 @@ static void handle_STRT(unsigned char *buf, size_t len)
 #ifdef DEBUG
     {
         char path[32];
-
-        /* Clear field for new game */
-        memset(g_field, 0, sizeof(g_field));
 
         /* Open trace file for new game */
         if (fp_trace != NULL) fclose(fp_trace);
@@ -301,17 +301,10 @@ static void player_advance(int n, int turn_dir)
     double ny = pl.y + v*1e-3*g_move_rate*sin(na);
 
     /* Then move ahead */
-    if (v > 0 && pl.hole == -1)
+    if (v > 0 && pl.hole == 0)
     {
-        g_window->gameView()->line(pl.x, pl.y, nx, ny, pl.col);
+        g_window->gameView()->line(pl.x, pl.y, pl.a, nx, ny, na, n);
     }
-
-#ifdef DEBUG
-    if (pl.hole == -1)
-    {
-        field_line(&g_field, pl.x, pl.y, pl.a, nx, ny, na, n + 1);
-    }
-#endif
 
     pl.x = nx;
     pl.y = ny;
@@ -337,7 +330,7 @@ static void player_move(int n, int move)
     }
 
     /* Change hole making state according to RNG */
-    if ( pl.hole == -1 && pl.timestamp >= g_warmup + g_hole_cooldown &&
+    if ( pl.hole == 0 && pl.timestamp >= g_warmup + g_hole_cooldown &&
          pl.timestamp - pl.solid_since >= g_hole_cooldown &&
          pl.rng_base%g_hole_probability == 0 )
     {
@@ -379,8 +372,11 @@ static void player_move(int n, int move)
     pl.rng_carry = rng_next>>32;
 
     /* Count down hole */
-    if (pl.hole == 0) pl.solid_since = pl.timestamp;
-    if (pl.hole >= 0) --pl.hole;
+    if (pl.hole > 0)
+    {
+        --pl.hole;
+        if (pl.hole == 0) pl.solid_since = pl.timestamp + 1;
+    }
 
     /* Increment player timestamp */
     pl.timestamp++;

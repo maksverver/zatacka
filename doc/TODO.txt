@@ -7,8 +7,7 @@ General:
 
 Client:
  - proper full screen mode on Windows
- - better (anti-aliased?) game rendering
-   based on server reference rendering
+ - anti-aliased field rendering?
 
 Server:
  - more accurate rendering (in progress)

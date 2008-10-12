@@ -9,7 +9,7 @@ struct Player
     Player()
         : col(), x(), y(), a(), timestamp(), last_move(),
           px(), py(), pa(), pt(),
-          dead(), hole(-1), solid_since(), name(),
+          dead(), hole(), solid_since(), name(),
           score_cur(), score_tot(), score_avg(),
           rng_base(), rng_carry() { };
 

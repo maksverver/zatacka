@@ -85,12 +85,8 @@ typedef struct Player
     int             score_history[SCORE_HISTORY];
 
     /* Hole creation */
-    int             hole, prev_hole;
+    int             hole;
     int             solid_since;
-
-    /* Crossing holes */
-    int             hole_id;        /* identifier of hole being made */
-    int             cross_hole_id;  /* identifier of hole being crossed */
 
     /* Multiply-with-carry RNG for this player
        (used to determine random state transitions) */
@@ -519,17 +515,14 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 if (v > 0)
                 {
                     /* Blank out edge of previous dot
-                       (it shouldn't count when checking for overlap) */
-                    if (pl->prev_hole == 0)
-                    {
-                        field_line( &g_field, pl->x, pl->y, pl->a,
-                                              pl->x, pl->y, pl->a, 0 );
-                    }
+                    (it shouldn't count when checking for overlap) */
+                    field_line( &g_field, pl->x, pl->y, pl->a,
+                                          pl->x, pl->y, pl->a, 0, NULL );
 
-                    /* Check for overlapping dots */
-                    bool hole = pl->hole > 0 || pl->prev_hole > 0;
-                    if (field_line( &g_field, pl->x, pl->y, pl->a, nx, ny, na,
-                                    hole ? -1 : pl->index + 1 ) != 0)
+                    /* Fill and test new line segment */
+                    int col = pl->hole > 0 ? -1 : pl->index + 1;
+                    if ( field_line( &g_field, pl->x, pl->y, pl->a, nx, ny, na,
+                                     col, NULL ) != 0 )
                     {
                         player_kill(pl);
                     }
@@ -539,13 +532,11 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                 pl->x = nx;
                 pl->y = ny;
 
-                if (pl->prev_hole != 0)
+                if (pl->hole > 0)
                 {
-                    pl->solid_since = pl->timestamp;
+                    --pl->hole;
+                    pl->solid_since = pl->timestamp + 1;
                 }
-
-                pl->prev_hole = pl->hole;
-                if (pl->hole > 0) --pl->hole;
             }
 
             ++pl->timestamp;
@@ -686,12 +677,9 @@ static void restart_game()
         pl->y               = 0.02 + 0.96*rand()/RAND_MAX;
         pl->a               = 2.0*M_PI*rand()/RAND_MAX;
         pl->hole            = 0;
-        pl->prev_hole       = 0;
         pl->solid_since     = 0;
         pl->rng_base        = g_gameid ^ n;
         pl->rng_carry       = 0;
-        pl->hole_id         = 0;
-        pl->cross_hole_id   = 0;
     }
 
     /* Assign player colors */
