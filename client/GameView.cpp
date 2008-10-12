@@ -2,8 +2,8 @@
 #include <algorithm>
 #include <string.h>
 
-GameView::GameView(int x, int y, int w, int h)
-    : Fl_Widget(x, y, w, h), offscr_created(false)
+GameView::GameView(int x, int y, int w, int h, bool antialiasing)
+    : Fl_Widget(x, y, w, h), offscr_created(false), antialiasing(antialiasing)
 {
     memset(field, 0, sizeof(field));
 }
@@ -25,14 +25,47 @@ void GameView::line( double px1, double py1, double pa1,
     int y1 = r.y1*h/FIELD_SIZE, y2 = r.y2*h/FIELD_SIZE + 1;
 
     fl_begin_offscreen(offscr);
-    fl_color(sprites[n].col);
-    for (int y = y1; y < y2; ++y)
+    if (antialiasing)
     {
-        for (int x = x1; x < x2; ++x)
+        for (int y = y1; y < y2; ++y)
         {
-            if (field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
+            for (int x = x1; x < x2; ++x)
             {
+                /* Simple anti-aliasing (sample nine subpixels) */
+                unsigned r = 0, g = 0, b = 0;
+                for (int dy = 0; dy < 3; ++dy)
+                {
+                    for (int dx = 0; dx < 3; ++dx)
+                    {
+                        int i = field [FIELD_SIZE*(3*y + dy)/(3*h)]
+                                      [FIELD_SIZE*(3*x + dx)/(3*w)];
+                        if (i > 0)
+                        {
+                            Fl_Color c = sprites[i - 1].col;
+                            r += (c >> 24)&255;
+                            g += (c >> 16)&255;
+                            b += (c >>  8)&255;
+                        }
+                    }
+                }
+
+                fl_color(fl_rgb_color(r/9, g/9, b/9));
                 fl_point(x, h - 1 - y);
+            }
+        }
+    }
+    else
+    {
+        /* Non anti-aliased display (may render faster) */
+        fl_color(sprites[n].col);
+        for (int y = y1; y < y2; ++y)
+        {
+            for (int x = x1; x < x2; ++x)
+            {
+                if (field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
+                {
+                    fl_point(x, h - 1 - y);
+                }
             }
         }
     }
@@ -127,7 +160,7 @@ void GameView::setSprite(int n, double x, double y, double a)
     assert(n >= 0 && (size_t)n < sprites.size());
     if (sprites[n].visible()) damageSprite(n);
     sprites[n].x = (int)(this->w()*x);
-    sprites[n].y = (int)(this->h()*(1.0 - y)) - 1;
+    sprites[n].y = this->h() - 1 - (int)(this->h()*y);
     sprites[n].a = a;
     if (sprites[n].visible()) damageSprite(n);
 }
@@ -177,5 +210,5 @@ void GameView::setSprites(int count)
 
 bool GameView::writeFieldBitmap(const char *path)
 {
-    return bmp_write(path, &field[0][0], 1000, 1000);
+    return bmp_write(path, &field[0][0], FIELD_SIZE, FIELD_SIZE);
 }

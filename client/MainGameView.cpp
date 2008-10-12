@@ -30,8 +30,8 @@ static char shift(char c)
     }
 }
 
-MainGameView::MainGameView(int x, int y, int w, int h)
-    : GameView(x, y, w, h), typing(false)
+MainGameView::MainGameView(int x, int y, int w, int h, bool antialiasing)
+    : GameView(x, y, w, h, antialiasing), typing(false)
 {
 }
 

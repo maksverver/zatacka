@@ -134,8 +134,8 @@ static unsigned g_gameid;       /* Game identifier (also used as random seed) */
 static unsigned g_num_holes;    /* Number of holes created */
 static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
-static unsigned char g_field[1000][1000];
-static unsigned char g_holes[1000][1000];
+static unsigned char g_field[FIELD_SIZE][FIELD_SIZE];
+static unsigned char g_holes[FIELD_SIZE][FIELD_SIZE];
 static FILE *fp_replay;         /* Record replay to this file */
 
 struct RGB g_colors[NUM_COLORS] = {
@@ -651,7 +651,7 @@ static void restart_game()
 
         /* Dump field to BMP image */
         sprintf(path, "bmp/field-%08x.bmp", g_gameid);
-        if (bmp_write(path, &g_field[0][0], 1000, 1000))
+        if (bmp_write(path, &g_field[0][0], FIELD_SIZE, FIELD_SIZE))
         {
             info("Field dumped to file \"%s\"", path);
         }

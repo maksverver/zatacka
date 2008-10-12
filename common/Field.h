@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define FIELD_SIZE (1000)
+#define FIELD_SIZE (2000)
 
 typedef unsigned char (Field)[FIELD_SIZE][FIELD_SIZE];
 

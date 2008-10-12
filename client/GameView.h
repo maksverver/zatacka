@@ -22,7 +22,7 @@ struct Sprite
 class GameView : public Fl_Widget
 {
 public:
-    GameView(int x, int y, int w, int h);
+    GameView(int x, int y, int w, int h, bool antialiasing);
     ~GameView();
 
     void line( double x1, double y1, double a1,
@@ -51,9 +51,10 @@ protected:
 
 private:
     bool offscr_created;
+    bool antialiasing;
     Fl_Offscreen offscr;
     std::vector<Sprite> sprites;
-    unsigned char field[1000][1000];
+    unsigned char field[FIELD_SIZE][FIELD_SIZE];
 };
 
 #endif /* ndef GAME_VIEW_H_INCLUDED */

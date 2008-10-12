@@ -1,12 +1,13 @@
 #include "MainWindow.h"
 #include <stdio.h>
 
-MainWindow::MainWindow(int width, int height, bool fullscreen)
+MainWindow::MainWindow( int width, int height,
+                        bool fullscreen, bool antialiasing )
     : Fl_Double_Window(width, height)
 {
     label("Zatacka!");
     color(fl_gray_ramp(FL_NUM_GRAY/4));
-    gv = new MainGameView(2, 2, height - 4, height - 4);
+    gv = new MainGameView(2, 2, height - 4, height - 4, antialiasing);
     sv = new ScoreView(height, 0, width - height, height - 20);
     gid_box = new Fl_Box(height, height - 20, width - height, 20);
     gid_box->labelfont(FL_HELVETICA);

@@ -26,6 +26,7 @@ Config::Config()
     /* Set some default values */
     m_resolution = 1;
     m_fullscreen = false;
+    m_antialiasing = true;
     m_width  = res_width[m_resolution];
     m_height = res_height[m_resolution];
 
@@ -54,10 +55,11 @@ Config::~Config()
 bool Config::copy_settings()
 {
     /* Copy settings */
-    m_resolution = w_resolution->value();
-    m_fullscreen = w_fullscreen->value();
-    m_width  = res_width[m_resolution];
-    m_height = res_height[m_resolution];
+    m_resolution    = w_resolution->value();
+    m_fullscreen    = w_fullscreen->value();
+    m_antialiasing  = w_antialiasing->value();
+    m_width         = res_width[m_resolution];
+    m_height        = res_height[m_resolution];
 
     /* Network config */
     m_hostname = w_hostname->value();
@@ -168,7 +170,7 @@ bool Config::show_window()
     win->label("Configuration");
     win->set_modal();
 
-    Fl_Group *display = new Fl_Group(10, 30, 280, 80, "Display");
+    Fl_Group *display = new Fl_Group(10, 30, 280, 90, "Display");
     display->box(FL_DOWN_FRAME);
     w_resolution = new Fl_Choice(110, 50, 170, 20, "Window size: ");
     for (int n = 0; n < res_count; ++n)
@@ -178,13 +180,15 @@ bool Config::show_window()
     w_resolution->value(m_resolution);
     w_fullscreen = new Fl_Check_Button(110, 70, 170, 20, "Fullscreen");
     w_fullscreen->value(m_fullscreen);
+    w_antialiasing = new Fl_Check_Button(110, 90, 170, 20, "Anti-aliasing");
+    w_antialiasing->value(m_antialiasing);
     display->end();
 
-    Fl_Group *network = new Fl_Group(10, 140, 280, 80, "Network");
+    Fl_Group *network = new Fl_Group(10, 150, 280, 70, "Network");
     network->box(FL_DOWN_FRAME);
-    w_hostname = new Fl_Input(110, 160, 160, 20, "Host name: ");
+    w_hostname = new Fl_Input(110, 170, 160, 20, "Host name: ");
     w_hostname->value(m_hostname.c_str());
-    w_port = new Fl_Input(110, 180, 160, 20, "Port number: ");
+    w_port = new Fl_Input(110, 190, 160, 20, "Port number: ");
     char port_buf[32];
     sprintf(port_buf, "%d", m_port);
     w_port->value(port_buf);
@@ -245,6 +249,12 @@ bool Config::parse_setting(std::string &key, std::string &value, int i, int j)
     if (key == "fullscreen")
     {
         m_fullscreen = (bool)atoi(value.c_str());
+        return true;
+    }
+
+    if (key == "antialiasing")
+    {
+        m_antialiasing = (bool)atoi(value.c_str());
         return true;
     }
 
@@ -341,6 +351,7 @@ bool Config::save_settings(const char *path)
     std::ofstream ofs(path);
     ofs << "resolution=" << m_resolution << '\n';
     ofs << "fullscreen=" << m_fullscreen << '\n';
+    ofs << "antialiasing=" << m_antialiasing << '\n';
     ofs << "hostname=" << m_hostname << '\n';
     ofs << "port=" << m_port << '\n';
     for (int p = 0; p < 4; ++p)

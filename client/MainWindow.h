@@ -8,7 +8,7 @@
 class MainWindow : public Fl_Double_Window
 {
 public:
-    MainWindow(int width, int height, bool fullscreen);
+    MainWindow(int width, int height, bool fullscreen, bool antialiasing);
     ~MainWindow();
     int handle(int type);
     MainGameView *gameView() { return gv; };

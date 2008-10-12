@@ -99,7 +99,7 @@ int field_line( Field *field,
                 double x2, double y2, double a2,
                 int col, Rect *rect )
 {
-    double th = 7.0;    /* thickness */
+    double th = 7e-3*FIELD_SIZE;    /* thickness */
 
     double dx1 = -sin(a1), dy1 = cos(a1);
     double dx2 = -sin(a2), dy2 = cos(a2);

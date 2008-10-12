@@ -21,7 +21,7 @@ struct ChatLine
 class MainGameView : public GameView
 {
 public:
-    MainGameView(int x, int y, int w, int h);
+    MainGameView(int x, int y, int w, int h, bool antialiasing);
     ~MainGameView();
 
     void appendMessage(const std::string &text, Fl_Color col = FL_WHITE);

@@ -45,7 +45,7 @@ int g_local_timestamp;  /* local estimated timestamp */
 double g_server_time;   /* estimated server time at timestamp 0 */
 int g_data_rate;        /* moves per second */
 int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
-int g_move_rate;        /* move rate (g_move_rate*screen_size/1000 per turn) */
+int g_move_rate;        /* move rate (in 1000ths of field size) */
 int g_warmup;           /* number of turns to wait before moving forward */
 int g_score_rounds;     /* number of rounds for the moving average score */
 int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
@@ -665,7 +665,8 @@ int main(int argc, char *argv[])
     } while (!g_cs->connected());
 
     /* Create window */
-    g_window = new MainWindow(cfg.width(), cfg.height(), cfg.fullscreen());
+    g_window = new MainWindow( cfg.width(), cfg.height(),
+                                cfg.fullscreen(), cfg.antialiasing() );
     g_window->show();
 
     /* Set-up names */
