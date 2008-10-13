@@ -7,9 +7,6 @@
 class DemoBot : public PlayerController
 {
 public:
-    DemoBot();
-    ~DemoBot();
-
     void restart(const GameParameters &gp);
 
     Move move( int timestamp, const Player *players,
@@ -21,16 +18,6 @@ private:
 
 /* This function is called to created instances of our bot class. */
 extern "C" PlayerController *create_bot() { return new DemoBot(); }
-
-/* Constructor; bot initialization goes here */
-DemoBot::DemoBot()
-{
-}
-
-/* Destructor; clean up all allocated resources for this bot here. */
-DemoBot::~DemoBot()
-{
-}
 
 /* A new game starts: clean up old game stat and reinitialize */
 void DemoBot::restart(const GameParameters &gp)
@@ -44,6 +31,9 @@ Move DemoBot::move( int timestamp, const Player *players,
                     int player_index, const Field &field )
 {
     (void)field;          /* unused */
+
+    /* Join game (even if we start out in the right direction) */
+    if (timestamp == 0) return MOVE_TURN_LEFT;
 
     if (timestamp < warmup)
     {

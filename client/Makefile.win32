@@ -3,4 +3,4 @@ include Makefile
 all: zatacka.exe
 
 zatacka.exe: zatacka
-	mv zatacka zatacka.exe
+	cp zatacka zatacka.exe
