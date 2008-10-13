@@ -29,7 +29,7 @@ public:
        Implementation should return a valid move (not MOVE_NONE or MOVE_DEAD).
     */
     virtual Move move( int timestamp, const Player *players,
-                       int player_index, const Field *field ) = 0;
+                       int player_index, const Field &field ) = 0;
 };
 
 #endif /* ndef PLAYER_CONTROLLER_H_INCLUDED */

@@ -11,7 +11,7 @@ public:
     void restart(const GameParameters &gp);
 
     Move move( int timestamp, const Player *players,
-               int player_index, const Field *field );
+               int player_index, const Field &field );
 
 private:
     int key_left, key_right;

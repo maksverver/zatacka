@@ -44,7 +44,7 @@ public:
 
     bool writeFieldBitmap(const char *path);
 
-    const Field *field() const { return &m_field; }
+    const Field &field() const { return m_field; }
 
 protected:
     void useOffscreen();

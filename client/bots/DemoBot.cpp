@@ -13,7 +13,7 @@ public:
     void restart(const GameParameters &gp);
 
     Move move( int timestamp, const Player *players,
-               int player_index, const Field *field );
+               int player_index, const Field &field );
 
 private:
     int warmup, period;
@@ -22,7 +22,7 @@ private:
 /* This function is called to created instances of our bot class. */
 extern "C" PlayerController *create_bot() { return new DemoBot(); }
 
-/* Constructor; bot initialization goes here */ 
+/* Constructor; bot initialization goes here */
 DemoBot::DemoBot()
 {
 }
@@ -41,7 +41,7 @@ void DemoBot::restart(const GameParameters &gp)
 
 /* Select a move to make at the given timestamp. */
 Move DemoBot::move( int timestamp, const Player *players,
-                    int player_index, const Field *field )
+                    int player_index, const Field &field )
 {
     (void)field;          /* unused */
 

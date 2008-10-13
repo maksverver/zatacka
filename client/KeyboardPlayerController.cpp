@@ -12,7 +12,7 @@ void KeyboardPlayerController::restart(const GameParameters &gp)
 }
 
 Move KeyboardPlayerController::move( int timestamp, const Player *players,
-               int player_index, const Field *field )
+               int player_index, const Field &field )
 {
     (void)timestamp;
     (void)players;
