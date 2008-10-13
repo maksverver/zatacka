@@ -70,8 +70,6 @@ void GameView::line( double px1, double py1, double pa1,
         }
     }
     fl_end_offscreen();
-
-    damage(this->x() + x1, this->y() + h - 1 - y2, x2 - x1, y2 - y1, 1);
 }
 
 void GameView::draw()
@@ -144,15 +142,7 @@ void GameView::draw()
 
 void GameView::damageSprite(int n)
 {
-    damage(1, x() + sprites[n].x - 16, y() + sprites[n].y - 16, 32, 32);
-
-    if (!sprites[n].label.empty())
-    {
-        int w = 0, h = 0;
-        fl_font(FL_HELVETICA, 12);
-        fl_measure(sprites[n].label.c_str(), w, h, 0);
-        damage(1, x() + sprites[n].x - w/2 - 4, y() + sprites[n].y + 6, w + 8, 24);
-    }
+    (void)n;
 }
 
 void GameView::setSprite(int n, double x, double y, double a)
