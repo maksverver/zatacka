@@ -5,12 +5,15 @@ General:
    numers where appropriate).
  - AI interface
 
+ Potential bug:
+ - the correctness of the line segment rendering code
+   (in particular, the code that blanks out overlapping segments)
+   seems to depend on compiler settings. This is ugly!
+
 Client:
  - proper full screen mode on Windows
- - anti-aliased field rendering?
 
 Server:
- - more accurate rendering (in progress)
  - server console [1.1]
 
  Potential bug:

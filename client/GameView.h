@@ -44,6 +44,8 @@ public:
 
     bool writeFieldBitmap(const char *path);
 
+    const Field *field() const { return &m_field; }
+
 protected:
     void useOffscreen();
     void draw();
@@ -54,7 +56,7 @@ private:
     bool antialiasing;
     Fl_Offscreen offscr;
     std::vector<Sprite> sprites;
-    unsigned char field[FIELD_SIZE][FIELD_SIZE];
+    Field m_field;
 };
 
 #endif /* ndef GAME_VIEW_H_INCLUDED */

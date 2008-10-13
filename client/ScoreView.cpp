@@ -24,7 +24,7 @@ void ScoreWidget::draw()
     int x = this->x(), y = this->y(), w = this->w(), h = this->h();
 
     /* Draw box */
-    fl_draw_box(FL_RSHADOW_BOX, x, y, w, h, pl.col);
+    fl_draw_box(FL_RSHADOW_BOX, x, y, w, h, (Fl_Color)pl.col);
 
     /* Draw player name */
     fl_font(FL_HELVETICA, 20);

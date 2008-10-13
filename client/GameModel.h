@@ -1,8 +1,32 @@
 #ifndef GAME_MODEL_H_INCLUDED
 #define GAME_MODEL_H_INCLUDED
 
-#include "common.h"
 #include <string>
+
+enum Move
+{
+    MOVE_NONE       = 0,
+    MOVE_FORWARD    = 1,
+    MOVE_TURN_LEFT  = 2,
+    MOVE_TURN_RIGHT = 3,
+    MOVE_DEAD       = 4
+};
+
+struct GameParameters
+{
+    unsigned gameid;        /* current game id */
+    int data_rate;          /* moves per second */
+    double turn_rate;       /* radians per move */
+    double move_rate;       /* units per move */
+    int warmup;             /* number of turns to wait before moving */
+    int score_rounds;       /* number of rounds for the moving average score */
+    int hole_probability;   /* probability of a hole (1/g_hole_probability) */
+    int hole_length_min;    /* minimum length of a hole (in turns) */
+    int hole_length_max;    /* maximum length of a hole (in turns) */
+    int hole_cooldown;      /* minimum number of turns between holes */
+    int move_backlog;       /* number of moves to cache and send/receive */
+    int num_players;        /* number of players in the game */
+};
 
 struct Player
 {
@@ -13,7 +37,7 @@ struct Player
           score_cur(), score_tot(), score_avg(), score_holes(),
           rng_base(), rng_carry() { };
 
-    Fl_Color    col;            /* color */
+    unsigned    col;            /* color */
     double      x, y, a;        /* position (0 <= x,y < 1) and angle */
     int         timestamp;      /* last changed */
     int         last_move;      /* last move (used for predictions) */

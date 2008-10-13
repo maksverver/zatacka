@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "GameModel.h"
 #include "MainWindow.h"
+#include "KeyboardPlayerController.h"
 #include "ScoreView.h"
 #include <algorithm>
 #include <vector>
@@ -23,43 +24,21 @@
 
 #define CLIENT_FPS 100
 
-class KeyBindings
-{
-public:
-    KeyBindings(int a, int b) { keys[0] = a; keys[1] = b; };
-    int operator[] (int i) const { return i >= 0 && i < 2 ? keys[i] : 0; };
-    int left()  { return keys[0]; }
-    int right() { return keys[1]; }
-    bool contains(int i) { return keys[0] == i || keys[1] == i; }
-private:
-    int keys[2];
-};
-
 /* Global variables*/
-MainWindow *g_window;    /* main window */
+MainWindow *g_window;   /* main window */
 ClientSocket *g_cs;     /* client connection to the server */
+GameParameters g_gp;    /* game parameters */
 
-unsigned g_gameid;      /* current game id */
 int g_last_timestamp;   /* last timestamp received */
 int g_local_timestamp;  /* local estimated timestamp */
 double g_server_time;   /* estimated server time at timestamp 0 */
-int g_data_rate;        /* moves per second */
-int g_turn_rate;        /* turn rate (2pi/g_turn_rate radians per turn) */
-int g_move_rate;        /* move rate (in 1000ths of field size) */
-int g_warmup;           /* number of turns to wait before moving forward */
-int g_score_rounds;     /* number of rounds for the moving average score */
-int g_hole_probability; /* probability of a hole (1/g_hole_probability) */
-int g_hole_length_min;  /* minimum length of a hole (in turns) */
-int g_hole_length_max;  /* maximum length of a hole (in turns) */
-int g_hole_cooldown;    /* minimum number of turns between holes */
-int g_move_backlog;     /* number of moves to cache and send/receive */
-int g_num_players;      /* number of players in the game == g_players.size() */
 
 std::vector<std::string> g_my_names;    /* my player names */
-std::vector<KeyBindings> g_my_keys;     /* my player keys */
-std::vector<std::string> g_my_moves;    /* my recent moves (each g_move_backlog long) */
+std::vector<std::string> g_my_moves;    /* my recent moves (each g_gp.move_backlog long) */
 std::vector<int>         g_my_players;  /* indices of my players in g_players */
 std::vector<int>         g_my_indices;
+std::vector<PlayerController*> g_my_controllers;
+std::vector<int>         g_my_keys;     /* all keys in use */
 
 std::vector<Player> g_players;  /* all players in the game */
 
@@ -82,11 +61,11 @@ static bool player_update_prediction(int n, int move)
     if (pl.dead) return false;
 
     int turn_dir = (move == 2) ? +1 : (move == 3) ? -1 : 0;
-    pl.pa += turn_dir*2.0*M_PI/g_turn_rate;
-    if (pl.pt >= g_warmup)
+    pl.pa += turn_dir*g_gp.turn_rate;
+    if (pl.pt >= g_gp.warmup)
     {
-        pl.px += 1e-3*g_move_rate*cos(pl.pa);
-        pl.py += 1e-3*g_move_rate*sin(pl.pa);
+        pl.px += g_gp.move_rate*cos(pl.pa);
+        pl.py += g_gp.move_rate*sin(pl.pa);
     }
     ++pl.pt;
     return true;
@@ -94,7 +73,7 @@ static bool player_update_prediction(int n, int move)
 
 static void update_sprites()
 {
-    for (int n = 0; n < g_num_players; ++n)
+    for (int n = 0; n < g_gp.num_players; ++n)
     {
         Player &pl = g_players[n];
         while (pl.pt < g_local_timestamp)
@@ -128,11 +107,11 @@ static void handle_MESG(unsigned char *buf, size_t len)
     {
         /* Show player chat message */
         Fl_Color col = fl_gray_ramp(FL_NUM_GRAY/2);
-        for (int n = 0; n < g_num_players; ++n)
+        for (int n = 0; n < g_gp.num_players; ++n)
         {
             if (g_players[n].name == name)
             {
-                col = g_players[n].col;
+                col = (Fl_Color)g_players[n].col;
                 break;
             }
         }
@@ -156,10 +135,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
 
 #ifdef DEBUG
-    if (g_gameid != 0)
+    if (g_gp.gameid != 0)
     {
         char path[32];
-        sprintf(path, "bmp/field-%08x.bmp", g_gameid);
+        sprintf(path, "bmp/field-%08x.bmp", g_gp.gameid);
         if (g_window->gameView()->writeFieldBitmap(path))
         {
             info("Field dumped to file \"%s\"", path);
@@ -173,32 +152,32 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     /* Read game parameters */
     size_t pos = 1;
-    g_data_rate         = buf[pos++];
-    g_turn_rate         = buf[pos++];
-    g_move_rate         = buf[pos++];
-    g_warmup            = buf[pos++];
-    g_score_rounds      = buf[pos++];
-    g_hole_probability  = buf[pos++]*256;
-    g_hole_probability += buf[pos++];
-    g_hole_length_min   = buf[pos++];
-    g_hole_length_max   = buf[pos++] + g_hole_length_min;
-    g_hole_cooldown     = buf[pos++];
-    g_move_backlog      = buf[pos++];
-    g_num_players       = buf[pos++];
-    g_gameid            = buf[pos++] << 24;
-    g_gameid           += buf[pos++] << 16;
-    g_gameid           += buf[pos++] <<  8;
-    g_gameid           += buf[pos++];
+    g_gp.data_rate         = buf[pos++];
+    g_gp.turn_rate         = 2.0*M_PI/buf[pos++];
+    g_gp.move_rate         = 1e-3*buf[pos++];
+    g_gp.warmup            = buf[pos++];
+    g_gp.score_rounds      = buf[pos++];
+    g_gp.hole_probability  = buf[pos++]*256;
+    g_gp.hole_probability += buf[pos++];
+    g_gp.hole_length_min   = buf[pos++];
+    g_gp.hole_length_max   = buf[pos++] + g_gp.hole_length_min;
+    g_gp.hole_cooldown     = buf[pos++];
+    g_gp.move_backlog      = buf[pos++];
+    g_gp.num_players       = buf[pos++];
+    g_gp.gameid            = buf[pos++] << 24;
+    g_gp.gameid           += buf[pos++] << 16;
+    g_gp.gameid           += buf[pos++] <<  8;
+    g_gp.gameid           += buf[pos++];
     assert(pos == 17);
 
-    info("Restarting game with %d players", g_num_players);
+    info("Restarting game with %d players", g_gp.num_players);
     g_last_timestamp = -1;
     g_local_timestamp = 0;
-    g_players = std::vector<Player>(g_num_players);
+    g_players = std::vector<Player>(g_gp.num_players);
     g_my_moves = std::vector<std::string> (
-        g_my_names.size(), std::string((size_t)g_move_backlog, 0) );
+        g_my_names.size(), std::string((size_t)g_gp.move_backlog, 0) );
     g_my_players = std::vector<int>(g_my_names.size(), -1);
-    g_my_indices = std::vector<int>(g_num_players, -1);
+    g_my_indices = std::vector<int>(g_gp.num_players, -1);
 
 #ifdef DEBUG
     {
@@ -206,7 +185,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
         /* Open trace file for new game */
         if (fp_trace != NULL) fclose(fp_trace);
-        sprintf(path, "trace/game-%08x.txt", g_gameid);
+        sprintf(path, "trace/game-%08x.txt", g_gp.gameid);
         fp_trace = fopen(path, "wt");
         if (fp_trace != NULL)
         {
@@ -219,7 +198,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     }
 #endif
 
-    for (int n = 0; n < g_num_players; ++n)
+    for (int n = 0; n < g_gp.num_players; ++n)
     {
         if (pos + 10 > len) fatal("invalid STRT packet received");
         g_players[n].col = fl_rgb_color(buf[pos], buf[pos + 1], buf[pos + 2]);
@@ -238,7 +217,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
               n, g_players[n].name.c_str(),
               g_players[n].x, g_players[n].y, g_players[n].a );
         g_players[n].timestamp = 0;
-        g_players[n].rng_base  = n^g_gameid;
+        g_players[n].rng_base  = n^g_gp.gameid;
         g_players[n].rng_carry = 0;
 
         for (int m = 0; m < (int)g_my_names.size(); ++m)
@@ -254,13 +233,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
     if (pos != len) warn("%d extra bytes in STRT packet", len - pos);
 
     /* Update gameid label & gameview */
-    g_window->setGameId(g_gameid);
-    g_window->resetGameView(g_num_players);
+    g_window->setGameId(g_gp.gameid);
+    g_window->resetGameView(g_gp.num_players);
 
     GameView *gv = g_window->gameView();
-    for (int n = 0; n < g_num_players; ++n)
+    for (int n = 0; n < g_gp.num_players; ++n)
     {
-        gv->setSpriteColor(n, g_players[n].col);
+        gv->setSpriteColor(n, (Fl_Color)g_players[n].col);
         gv->setSpriteType(n, Sprite::HIDDEN);
         gv->setSpriteLabel(n, std::string());
         player_reset_prediction(n);
@@ -272,13 +251,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
 static void handle_SCOR(unsigned char *buf, size_t len)
 {
-    if (len < 1 + 8*(size_t)g_num_players)
+    if (len < 1 + 8*(size_t)g_gp.num_players)
     {
         error("(SCOR) packet too short");
     }
 
     size_t pos = 1;
-    for (int n = 0; n < g_num_players; ++n)
+    for (int n = 0; n < g_gp.num_players; ++n)
     {
         g_players[n].score_tot = 256*buf[pos + 0] + buf[pos + 1];
         g_players[n].score_cur = 256*buf[pos + 2] + buf[pos + 3];
@@ -297,12 +276,12 @@ static void player_advance(int n, int turn_dir)
 {
     Player &pl = g_players[n];
 
-    int v = (pl.timestamp < g_warmup) ? 0 : 1;
+    int v = (pl.timestamp < g_gp.warmup) ? 0 : 1;
 
     /* First turn */
-    double na = pl.a + turn_dir*2.0*M_PI/g_turn_rate;
-    double nx = pl.x + v*1e-3*g_move_rate*cos(na);
-    double ny = pl.y + v*1e-3*g_move_rate*sin(na);
+    double na = pl.a + turn_dir*g_gp.turn_rate;
+    double nx = pl.x + v*g_gp.move_rate*cos(na);
+    double ny = pl.y + v*g_gp.move_rate*sin(na);
 
     /* Then move ahead */
     if (v > 0 && pl.hole == 0)
@@ -320,27 +299,27 @@ static void player_move(int n, int move)
     Player &pl = g_players[n];
 
     /* Change sprite after warmup period ends */
-    if (pl.timestamp == g_warmup)
+    if (pl.timestamp == g_gp.warmup)
     {
         g_window->gameView()->setSpriteLabel(n, std::string());
         g_window->gameView()->setSpriteType(n, Sprite::DOT);
     }
 
     /* Display sprite during warmup after first move */
-    if ((move == 2 || move == 3) && (pl.timestamp < g_warmup))
+    if ((move == 2 || move == 3) && (pl.timestamp < g_gp.warmup))
     {
         g_window->gameView()->setSpriteType(n, Sprite::ARROW);
         g_window->gameView()->setSpriteLabel(n, g_players[n].name);
     }
 
     /* Change hole making state according to RNG */
-    if ( pl.hole == 0 && pl.timestamp >= g_warmup + g_hole_cooldown &&
-         pl.timestamp - pl.solid_since >= g_hole_cooldown &&
-         pl.rng_base%g_hole_probability == 0 )
+    if ( pl.hole == 0 && pl.timestamp >= g_gp.warmup + g_gp.hole_cooldown &&
+         pl.timestamp - pl.solid_since >= g_gp.hole_cooldown &&
+         pl.rng_base%g_gp.hole_probability == 0 )
     {
-        pl.hole = g_hole_length_min +
-                 pl.rng_base/g_hole_probability %
-                 (g_hole_length_max - g_hole_length_min + 1);
+        pl.hole = g_gp.hole_length_min +
+                 pl.rng_base/g_gp.hole_probability %
+                 (g_gp.hole_length_max - g_gp.hole_length_min + 1);
     }
 
     switch (move)
@@ -399,32 +378,21 @@ static void forward_to(int timestamp)
         std::string &moves = g_my_moves[n];
         std::rotate(moves.begin(), moves.begin() + delay, moves.end());
 
-        unsigned char m;
-        if (Fl::event_key(g_my_keys[n][0]) && !Fl::event_key(g_my_keys[n][1]))
-        {
-            m = 2;
-        }
-        else
-        if (Fl::event_key(g_my_keys[n][1]) && !Fl::event_key(g_my_keys[n][0]))
-        {
-            m = 3;
-        }
-        else
-        {
-            m = 1;
-        }
-
         /* Fill in new moves */
-        for (int pos = g_move_backlog - delay; pos < g_move_backlog; ++pos)
+        int t = g_local_timestamp;
+        for (int pos = g_gp.move_backlog - delay; pos < g_gp.move_backlog; ++pos)
         {
-            moves[pos] = m;
-            player_update_prediction(p, m);
-        }
+            Move m = g_my_controllers[n]->move( t++, g_players.data(), p,
+                                                g_window->gameView()->field() );
+            moves[pos] = (unsigned char)m;
+            player_update_prediction(p, moves[pos]);
 
-        /* Hide warmup message if client has joined */
-        if (timestamp < g_warmup && (m == 2 || m == 3))
-        {
-            g_window->gameView()->setWarmup(false);
+            /* Hide warmup message if client has joined */
+            if ( t < g_gp.warmup &&
+                 (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
+            {
+                g_window->gameView()->setWarmup(false);
+            }
         }
     }
     g_local_timestamp = timestamp;
@@ -434,18 +402,18 @@ static void forward_to(int timestamp)
         char packet[4096];
         size_t pos = 0;
         packet[pos++] = MUCS_MOVE;
-        packet[pos++] = (g_gameid >> 24)&255;
-        packet[pos++] = (g_gameid >> 16)&255;
-        packet[pos++] = (g_gameid >>  8)&255;
-        packet[pos++] = (g_gameid >>  0)&255;
+        packet[pos++] = (g_gp.gameid >> 24)&255;
+        packet[pos++] = (g_gp.gameid >> 16)&255;
+        packet[pos++] = (g_gp.gameid >>  8)&255;
+        packet[pos++] = (g_gp.gameid >>  0)&255;
         packet[pos++] = (g_local_timestamp >> 24)&255;
         packet[pos++] = (g_local_timestamp >> 16)&255;
         packet[pos++] = (g_local_timestamp >>  8)&255;
         packet[pos++] = (g_local_timestamp >>  0)&255;
         for (size_t n = 0; n < g_my_moves.size(); ++n)
         {
-            memcpy(packet + pos, g_my_moves[n].data(), g_move_backlog);
-            pos += g_move_backlog;
+            memcpy(packet + pos, g_my_moves[n].data(), g_gp.move_backlog);
+            pos += g_gp.move_backlog;
         }
         g_cs->write(packet, pos, false);
     }
@@ -453,17 +421,17 @@ static void forward_to(int timestamp)
 
 static void handle_MOVE(unsigned char *buf, size_t len)
 {
-    if (len < (size_t)9 + g_num_players)
+    if (len < (size_t)9 + g_gp.num_players)
     {
         error("(MOVE) packet too small");
         return;
     }
 
     unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
-    if (gameid != g_gameid)
+    if (gameid != g_gp.gameid)
     {
         warn("(MOVE) packet with invalid game id (received %d; expected %d)",
-            gameid, g_gameid);
+            gameid, g_gp.gameid);
         return;
     }
 
@@ -476,20 +444,20 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         return;
     }
 
-    if (g_last_timestamp < g_warmup && timestamp >= g_warmup)
+    if (g_last_timestamp < g_gp.warmup && timestamp >= g_gp.warmup)
     {
         g_window->gameView()->setWarmup(false);
     }
 
     /* Update estimated server time (at start of the round) */
     {
-        double t = time_now() - 1.0*timestamp/g_data_rate;
+        double t = time_now() - 1.0*timestamp/g_gp.data_rate;
         if (g_last_timestamp == -1 || t < g_server_time) g_server_time = t;
     }
 
     /* Update moves */
-    size_t pos = 9 + g_num_players;
-    for (int n = 0; n < g_num_players; ++n)
+    size_t pos = 9 + g_gp.num_players;
+    for (int n = 0; n < g_gp.num_players; ++n)
     {
         if (!buf[9 + n])
         {
@@ -502,12 +470,12 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         /* Copying isn't strictly necessary here, but makes correct processing
           a lot easier! Don't change unless you know what you are doing! */
         char moves[256];
-        assert((size_t)g_move_backlog <= sizeof(moves));
-        memcpy(moves, buf + pos, g_move_backlog);
-        pos += g_move_backlog;
+        assert((size_t)g_gp.move_backlog <= sizeof(moves));
+        memcpy(moves, buf + pos, g_gp.move_backlog);
+        pos += g_gp.move_backlog;
 
         /* Check if we have missed any moves */
-        if (timestamp - g_players[n].timestamp > g_move_backlog)
+        if (timestamp - g_players[n].timestamp > g_gp.move_backlog)
         {
             error("client out of sync!");
             g_window->gameView()->appendMessage("Client out-of-sync!");
@@ -516,8 +484,8 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         }
 
         /* Add missing moves */
-        for ( int i = g_move_backlog - (timestamp - g_players[n].timestamp);
-              i < g_move_backlog; ++i)
+        for ( int i = g_gp.move_backlog - (timestamp - g_players[n].timestamp);
+              i < g_gp.move_backlog; ++i)
         {
             if (moves[i] == 0) break;  /* further moves not yet known */
             player_move(n, moves[i]);
@@ -565,7 +533,7 @@ void callback(void *arg)
     if (g_last_timestamp >= 0)
     {
         /* Estimate server timestamp */
-        int server_timestamp = (int)floor((t - g_server_time)*g_data_rate);
+        int server_timestamp = (int)floor((t - g_server_time)*g_gp.data_rate);
         forward_to(server_timestamp + 1);
         update_sprites();
     }
@@ -587,11 +555,7 @@ void send_chat_message(const std::string &msg)
 
 bool is_control_key(int key)
 {
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        if (g_my_keys[n].contains(key)) return true;
-    }
-    return false;
+    return find(g_my_keys.begin(), g_my_keys.end(), key) != g_my_keys.end();
 }
 
 void gui_fatal(const char *fmt, ...)
@@ -669,11 +633,16 @@ int main(int argc, char *argv[])
                                 cfg.fullscreen(), cfg.antialiasing() );
     g_window->show();
 
-    /* Set-up names */
+    /* Set-up local players */
     for (int n = 0; n < cfg.players(); ++n)
     {
+        int key_left  = cfg.key(n, 0);
+        int key_right = cfg.key(n, 1);
         g_my_names.push_back(cfg.name(n));
-        g_my_keys.push_back(KeyBindings(cfg.key(n, 0), cfg.key(n, 1)));
+        g_my_controllers.push_back(
+            new KeyboardPlayerController(key_left, key_right) );
+        g_my_keys.push_back(key_left);
+        g_my_keys.push_back(key_right);
     }
 
     /* Send hello message */

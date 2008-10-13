@@ -5,7 +5,7 @@
 GameView::GameView(int x, int y, int w, int h, bool antialiasing)
     : Fl_Widget(x, y, w, h), offscr_created(false), antialiasing(antialiasing)
 {
-    memset(field, 0, sizeof(field));
+    memset(m_field, 0, sizeof(m_field));
 }
 
 GameView::~GameView()
@@ -18,7 +18,7 @@ void GameView::line( double px1, double py1, double pa1,
                      int n )
 {
     Rect r;
-    field_line(&field, px1, py1, pa1, px2, py2, pa2, n + 1, &r);
+    field_line(&m_field, px1, py1, pa1, px2, py2, pa2, n + 1, &r);
 
     int w = this->w(), h = this->h();
     int x1 = r.x1*w/FIELD_SIZE, x2 = r.x2*w/FIELD_SIZE + 1;
@@ -37,8 +37,8 @@ void GameView::line( double px1, double py1, double pa1,
                 {
                     for (int dx = 0; dx < 3; ++dx)
                     {
-                        int i = field [FIELD_SIZE*(3*y + dy)/(3*h)]
-                                      [FIELD_SIZE*(3*x + dx)/(3*w)];
+                        int i = m_field [FIELD_SIZE*(3*y + dy)/(3*h)]
+                                        [FIELD_SIZE*(3*x + dx)/(3*w)];
                         if (i > 0)
                         {
                             Fl_Color c = sprites[i - 1].col;
@@ -62,7 +62,7 @@ void GameView::line( double px1, double py1, double pa1,
         {
             for (int x = x1; x < x2; ++x)
             {
-                if (field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
+                if (m_field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
                 {
                     fl_point(x, h - 1 - y);
                 }
@@ -195,8 +195,8 @@ void GameView::clear()
         fl_rectf(0, 0, w(), h());
         fl_end_offscreen();
     }
-    memset(field, 0, sizeof(field));
-    damage(1);
+    memset(m_field, 0, sizeof(m_field));
+    redraw();
 }
 
 void GameView::setSprites(int count)
@@ -210,5 +210,5 @@ void GameView::setSprites(int count)
 
 bool GameView::writeFieldBitmap(const char *path)
 {
-    return bmp_write(path, &field[0][0], FIELD_SIZE, FIELD_SIZE);
+    return bmp_write(path, &m_field[0][0], FIELD_SIZE, FIELD_SIZE);
 }
