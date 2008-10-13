@@ -9,12 +9,15 @@ OBJS=	ClientSocket.o Config.o GameModel.o GameView.o KeyWindow.o \
 	ScoreView.o zatacka.o
 
 all: zatacka
+	make -C bots all
 
 clean:
 	rm -f $(OBJS)
+	make -C bots clean
 
 distclean: clean
 	rm -f zatacka
+	make -C bots distclean
 
 zatacka: $(OBJS) 
 	$(CXX) -o zatacka $(OBJS) $(LDFLAGS) $(LDLIBS)

@@ -247,6 +247,13 @@ static void handle_STRT(unsigned char *buf, size_t len)
     update_sprites();
     g_window->scoreView()->update(g_players);
     g_window->gameView()->setWarmup(true);
+
+    /* Reinitialize controllers */
+    std::vector<PlayerController*>::iterator it;
+    for (it = g_my_controllers.begin(); it != g_my_controllers.end(); ++it)
+    {
+        (*it)->restart(g_gp);
+    }
 }
 
 static void handle_SCOR(unsigned char *buf, size_t len)
@@ -382,8 +389,9 @@ static void forward_to(int timestamp)
         int t = g_local_timestamp;
         for (int pos = g_gp.move_backlog - delay; pos < g_gp.move_backlog; ++pos)
         {
-            Move m = g_my_controllers[n]->move( t++, g_players.data(), p,
-                                                g_window->gameView()->field() );
+            PlayerController *pc = g_my_controllers[n];
+            Move m = pc->move( t++, g_players.data(), p,
+                               g_window->gameView()->field() );
             moves[pos] = (unsigned char)m;
             player_update_prediction(p, moves[pos]);
 
@@ -599,6 +607,49 @@ std::string get_config_path()
     return "zatacka.cfg";
 }
 
+#ifndef WIN32
+#include <dlfcn.h>
+static PlayerController *load_bot_posix(const char *name)
+{
+    char path[64];
+
+    /* Ensure filename is sensible */
+    if (strchr(name, '/') || strchr(name, '.') || strlen(name) > 40)
+    {
+        return NULL;
+    }
+
+    sprintf(path, "bots/%s.so", name);
+    void *dlh = dlopen(path, RTLD_NOW);
+    if (dlh == NULL)
+    {
+        info("dlopen failed -- %s", dlerror());
+        return NULL;
+    }
+
+    void *func = dlsym(dlh, "create_bot");
+    if (func == NULL)
+    {
+        info("dlsym failed -- %s", dlerror());
+        dlclose(dlh);
+        return NULL;
+    }
+
+    PlayerController *pc = ((PlayerController*(*)())func)();
+    if (pc == NULL) info("%s: create_bot() returned NULL", path);
+    return pc;
+}
+#endif /* ndef WIN32 */
+
+static PlayerController *load_bot(const char *name)
+{
+#ifdef WIN32
+    return NULL;
+#else
+    return load_bot_posix(name);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
     (void)argc;
@@ -636,13 +687,17 @@ int main(int argc, char *argv[])
     /* Set-up local players */
     for (int n = 0; n < cfg.players(); ++n)
     {
-        int key_left  = cfg.key(n, 0);
-        int key_right = cfg.key(n, 1);
+        PlayerController *pc = load_bot(cfg.name(n).c_str());
+        if (pc == NULL)
+        {
+            int key_left  = cfg.key(n, 0);
+            int key_right = cfg.key(n, 1);
+            pc = new KeyboardPlayerController(key_left, key_right);
+            g_my_keys.push_back(key_left);
+            g_my_keys.push_back(key_right);
+        }
+        g_my_controllers.push_back(pc);
         g_my_names.push_back(cfg.name(n));
-        g_my_controllers.push_back(
-            new KeyboardPlayerController(key_left, key_right) );
-        g_my_keys.push_back(key_left);
-        g_my_keys.push_back(key_right);
     }
 
     /* Send hello message */
