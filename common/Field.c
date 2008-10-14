@@ -42,35 +42,23 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
     if (y2 >= FIELD_SIZE) y2 = FIELD_SIZE - 1, res = 256;
 
     /* Draw scanlines bounded by polygon */
-    prv_x1 = +999999, prv_x2 = -999999;
-    cur_x1 = +999999, cur_x2 = -999999;
+    prv_x1 = cur_x1 = 1;
+    prv_x2 = cur_x2 = 0;
     for (y = y1; y <= y2; ++y)
     {
-        nxt_x1 = +999999, nxt_x2 = -999999;
-
-        /* Widen line to endpoints lying on it */
-        for (n = 0; n < npt;++n)
-        {
-            if (pts[n].y == y)
-            {
-                if (pts[n].x < nxt_x1) nxt_x1 = pts[n].x;
-                if (pts[n].x > nxt_x2) nxt_x2 = pts[n].x;
-            }
-        }
-
         /* Clip against crossing edges */
         for (n = 0; n < npt;++n)
         {
             const Point *p = &pts[n], *q = &pts[(n + 1)%npt];
 
             int *sx;
-            if (p->y < y && q->y > y)
+            if (p->y <= y && q->y >= y)
             {
                 /* Clip left side */
                 sx = &nxt_x1;
             }
             else
-            if (p->y > y && q->y < y)
+            if (p->y >= y && q->y <= y)
             {
                 /* Clip right side */
                 sx = &nxt_x2;
@@ -89,9 +77,11 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
                 q = r;
             }
 
-            /* FIXME: this is a very poor calculation especially when
-                      angles are at/close to 90 degrees */
-            *sx = p->x + (q->x - p->x)*(y - p->y)/(q->y - p->y);
+            /* this is a relatively poor estimation, especially when angles
+               are close to 90 agrees. */
+            *sx = p->x + (y - p->y) *
+                         (q->x - p->x + (p->x <= q->x ? 1 : -1)) /
+                         (q->y - p->y + (p->y <= q->y ? 1 : -1));
         }
 
         if (nxt_x1 < 0) { nxt_x1 = 0; res = 256; }
