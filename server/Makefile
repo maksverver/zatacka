@@ -12,7 +12,7 @@ clean:
 distclean: clean
 	rm -f zatacka-server
 
-zatacka-server: $(OBJS)
+zatacka-server: $(OBJS) ../common/common.a
 	$(CC) $(CFLAGS) -o zatacka-server $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 .PHONY: all clean distclean

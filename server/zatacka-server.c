@@ -539,11 +539,6 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
                 if (v > 0)
                 {
-                    /* Blank out edge of previous dot
-                    (it shouldn't count when checking for overlap) */
-                    field_line( &g_field, pl->x, pl->y, pl->a,
-                                          pl->x, pl->y, pl->a, 0, NULL );
-
                     /* Fill and test new line segment */
                     if ( field_line( &g_field, pl->x, pl->y, pl->a, nx, ny, na,
                                      pl->hole > 0 ? -1 : pl->index + 1, NULL )
@@ -553,8 +548,6 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     }
 
                     /* Detect hole crossing */
-                    field_line( &g_holes, pl->x, pl->y, pl->a,
-                                          pl->x, pl->y, pl->a, 0, NULL );
                     int holeid = field_line(
                         &g_holes, pl->x, pl->y, pl->a, nx, ny, na,
                         (pl->hole > 0 ? pl->my_holeid : -1), NULL );

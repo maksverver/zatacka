@@ -19,7 +19,7 @@ distclean: clean
 	rm -f zatacka
 	make -C bots distclean
 
-zatacka: $(OBJS) 
+zatacka: $(OBJS) ../common/common.a
 	$(CXX) -o zatacka $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 .PHONY: all clean distclean
