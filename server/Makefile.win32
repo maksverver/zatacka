@@ -6,4 +6,4 @@ include Makefile
 all: zatacka-server.exe
 
 zatacka-server.exe: zatacka-server
-	mv zatacka-server zatacka-server.exe
+	cp zatacka-server zatacka-server.exe

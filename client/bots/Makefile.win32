@@ -1,0 +1,6 @@
+include Makefile
+
+all: DemoBot.dll
+
+%.dll: %.so
+	cp "$<" "$@"

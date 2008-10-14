@@ -390,8 +390,7 @@ static void forward_to(int timestamp)
         for (int pos = g_gp.move_backlog - delay; pos < g_gp.move_backlog; ++pos)
         {
             PlayerController *pc = g_my_controllers[n];
-            Move m = pc->move( t++, g_players.data(), p,
-                               g_window->gameView()->field() );
+            Move m = pc->move(t++, &g_players[0], p, g_window->gameView()->field());
             moves[pos] = (unsigned char)m;
             player_update_prediction(p, moves[pos]);
 
@@ -642,10 +641,43 @@ static PlayerController *load_bot_posix(const char *name)
 }
 #endif /* ndef WIN32 */
 
+#ifdef WIN32
+static PlayerController *load_bot_win32(const char *name)
+{
+    char path[64];
+
+    /* Ensure filename is sensible */
+    if (strchr(name, '/') || strchr(name, '.') || strchr(name, '\\') || strlen(name) > 40)
+    {
+        return NULL;
+    }
+
+    sprintf(path, "bots\\%s.dll", name);
+    HMODULE hModule = LoadLibrary(path);
+    if (hModule == NULL)
+    {
+        info("Couldn't load library %s", path);
+        return NULL;
+    }
+
+    void *func = (void*)GetProcAddress(hModule, "create_bot");
+    if (func == NULL)
+    {
+        info("Couldn't find function create_bot() in %s", path);
+        FreeLibrary(hModule);
+        return NULL;
+    }
+
+    PlayerController *pc = ((PlayerController*(*)())func)();
+    if (pc == NULL) info("%s: create_bot() returned NULL", path);
+    return pc;
+}
+#endif /* def WIN32 */
+
 static PlayerController *load_bot(const char *name)
 {
 #ifdef WIN32
-    return NULL;
+    return load_bot_win32(name);
 #else
     return load_bot_posix(name);
 #endif

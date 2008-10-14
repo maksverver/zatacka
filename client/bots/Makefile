@@ -1,12 +1,10 @@
-BOTS=DemoBot.so
-
 include ../../base.mk
 CXXFLAGS+=-I../.. -fPIC
 
-all: $(BOTS)
+all: DemoBot.so
 
 %.so: %.o
-	$(CXX) -fPIC -shared -o DemoBot.so DemoBot.o
+	$(CXX) -fPIC -shared "$<" -o "$@"
 
 clean:
 	rm -f *.o
