@@ -38,7 +38,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
     }
 
     /* Clip y coordinates into field rectangle */
-    if (y1 < 0 || y2 >= FIELD_SIZE) y1 = 0, res = 256;
+    if (y1 < 0) y1 = 0, res = 256;
     if (y2 >= FIELD_SIZE) y2 = FIELD_SIZE - 1, res = 256;
 
     /* Draw scanlines bounded by polygon */
