@@ -1,6 +1,6 @@
 include ../base.mk
 
-OBJS=BMP.o Field.o Debug.o Time.o
+OBJS=BMP.o Colors.o Debug.o Field.o Time.o
 
 all: common.a
 

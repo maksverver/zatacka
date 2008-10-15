@@ -1,10 +1,11 @@
 #define _POSIX_SOURCE
 
-#include <common/Protocol.h>
-#include <common/Debug.h>
-#include <common/Time.h>
-#include <common/Field.h>
 #include <common/BMP.h>
+#include <common/Colors.h>
+#include <common/Debug.h>
+#include <common/Field.h>
+#include <common/Protocol.h>
+#include <common/Time.h>
 
 #include <assert.h>
 #include <math.h>
@@ -42,12 +43,12 @@ typedef int socklen_t;
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
-#define TURN_RATE             (40)
-#define MOVE_RATE              (7)
+#define TURN_RATE             (50)
+#define MOVE_RATE              (6)
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY      (60)
-#define HOLE_LENGTH_MIN        (2)
-#define HOLE_LENGTH_MAX        (7)
+#define HOLE_LENGTH_MIN        (3)
+#define HOLE_LENGTH_MAX        (8)
 #define HOLE_COOLDOWN         (10)
 
 #define VICTORY_TIME        (3*SERVER_FPS)
@@ -55,14 +56,6 @@ typedef int socklen_t;
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
 #define REPLAYDIR           "replay"
-
-/* Number of colors in the server palette */
-#define NUM_COLORS            (16)
-
-struct RGB
-{
-    unsigned char r, g, b;
-};
 
 typedef struct Player
 {
@@ -137,13 +130,6 @@ static Player *g_players[MAX_PLAYERS];
 static unsigned char g_field[FIELD_SIZE][FIELD_SIZE];
 static unsigned char g_holes[FIELD_SIZE][FIELD_SIZE];
 static FILE *fp_replay;         /* Record replay to this file */
-
-struct RGB g_colors[NUM_COLORS] = {
-    { 255,   0,   0 }, {   0, 160, 160 }, { 240, 240,   0 }, {   0,   0, 255 },
-    {   0, 255,   0 }, { 255,   0, 255 }, { 255, 160,   0 }, { 128,   0, 192 },
-    { 192, 192, 192 }, { 128, 255, 128 }, {   0, 240, 240 }, { 160,  40,   0 },
-    { 128, 128,   0 }, { 224,   0, 112 }, { 255, 128, 128 }, { 128, 128, 128 } };
-
 
 /*
     Function prototypes
