@@ -84,7 +84,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
                and prevents false overlap detected in touching polygons */
             if (p->x > q->x || (p->x == q->x && p->y > q->y))
             {
-                Point *r = p;
+                const Point *r = p;
                 p = q;
                 q = r;
             }

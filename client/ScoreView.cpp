@@ -29,7 +29,7 @@ void ScoreWidget::draw()
     /* Draw player name */
     fl_font(FL_HELVETICA, 20);
     fl_color(FL_WHITE);
-    fl_draw( pl.name.c_str(), x + 15, y + 2, w - 75, h - 2,
+    fl_draw( pl.name, x + 15, y + 2, w - 75, h - 2,
              (Fl_Align)(FL_ALIGN_LEFT | FL_ALIGN_CLIP), 0, 0 );
 
     /* Draw main score */

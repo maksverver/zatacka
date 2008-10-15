@@ -40,7 +40,8 @@ std::vector<int>         g_my_indices;
 std::vector<PlayerController*> g_my_controllers;
 std::vector<int>         g_my_keys;     /* all keys in use */
 
-std::vector<Player> g_players;  /* all players in the game */
+std::vector<Player>      g_players;         /* all players in the game */
+std::vector<std::string> g_names;           /* .. and their names */
 
 #ifdef DEBUG
 FILE *fp_trace;
@@ -55,12 +56,13 @@ static void player_reset_prediction(int n)
     pl.pt = g_players[n].timestamp;
 }
 
-static bool player_update_prediction(int n, int move)
+static bool player_update_prediction(int n, Move move)
 {
     Player &pl = g_players[n];
     if (pl.dead) return false;
 
-    int turn_dir = (move == 2) ? +1 : (move == 3) ? -1 : 0;
+    int turn_dir = (move == MOVE_TURN_LEFT)  ? +1 :
+                   (move == MOVE_TURN_RIGHT) ? -1 : 0;
     pl.pa += turn_dir*g_gp.turn_rate;
     if (pl.pt >= g_gp.warmup)
     {
@@ -78,7 +80,7 @@ static void update_sprites()
         Player &pl = g_players[n];
         while (pl.pt < g_local_timestamp)
         {
-            if (!player_update_prediction(n, pl.last_move)) break;
+            if (!player_update_prediction(n, (Move)pl.last_move)) break;
         }
         g_window->gameView()->setSprite(n, pl.px, pl.py, pl.pa);
     }
@@ -174,6 +176,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_last_timestamp = -1;
     g_local_timestamp = 0;
     g_players = std::vector<Player>(g_gp.num_players);
+    g_names   = std::vector<std::string>(g_gp.num_players);
     g_my_moves = std::vector<std::string> (
         g_my_names.size(), std::string((size_t)g_gp.move_backlog, 0) );
     g_my_players = std::vector<int>(g_my_names.size(), -1);
@@ -200,6 +203,8 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     for (int n = 0; n < g_gp.num_players; ++n)
     {
+        memset(&g_players[n], 0, sizeof(g_players[n]));
+
         if (pos + 10 > len) fatal("invalid STRT packet received");
         g_players[n].col = fl_rgb_color(buf[pos], buf[pos + 1], buf[pos + 2]);
         pos += 3;
@@ -211,10 +216,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
         pos += 2;
         int name_len = buf[pos++];
         if (pos + name_len > len) fatal("invalid STRT packet received");
-        g_players[n].name.assign((char*)(buf + pos), name_len);
+        g_names[n].assign((char*)(buf + pos), name_len);
+        g_players[n].name = g_names[n].c_str();
         pos += name_len;
-        info( "Player %d: name=%s x=%.3f y=%.3f a=%.3f",
-              n, g_players[n].name.c_str(),
+        info( "Player %d: name=%s x=%.3f y=%.3f a=%.3f", n, g_players[n].name,
               g_players[n].x, g_players[n].y, g_players[n].a );
         g_players[n].timestamp = 0;
         g_players[n].rng_base  = n^g_gp.gameid;
@@ -374,35 +379,36 @@ static void player_move(int n, int move)
 
 static void forward_to(int timestamp)
 {
-    if (timestamp <= g_local_timestamp) return;
+    const Field &field = g_window->gameView()->field();
 
-    int delay = timestamp - g_local_timestamp;
-    for (size_t n = 0; n < g_my_moves.size(); ++n)
+    if (g_local_timestamp >= timestamp) return;
+
+    while (g_local_timestamp < timestamp)
     {
-        int p = g_my_players[n];
-        if (p < 0) continue;
-
-        std::string &moves = g_my_moves[n];
-        std::rotate(moves.begin(), moves.begin() + delay, moves.end());
-
-        /* Fill in new moves */
-        int t = g_local_timestamp;
-        for (int pos = g_gp.move_backlog - delay; pos < g_gp.move_backlog; ++pos)
+        for (size_t n = 0; n < g_my_moves.size(); ++n)
         {
+            int p = g_my_players[n];
+            if (p < 0) continue;
+
+            std::string &moves = g_my_moves[n];
+            std::rotate(moves.begin(), moves.begin() + 1, moves.end());
+
+            /* Fill in new moves */
             PlayerController *pc = g_my_controllers[n];
-            Move m = pc->move(t++, &g_players[0], p, g_window->gameView()->field());
-            moves[pos] = (unsigned char)m;
-            player_update_prediction(p, moves[pos]);
+            Move m = pc->move(g_local_timestamp, &g_players[0], p, field);
+            moves[g_gp.move_backlog - 1] = (unsigned char)m;
+            player_update_prediction(p, m);
 
             /* Hide warmup message if client has joined */
-            if ( t < g_gp.warmup &&
-                 (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
+            if ( g_local_timestamp < g_gp.warmup &&
+                (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
             {
                 g_window->gameView()->setWarmup(false);
             }
         }
+
+        ++g_local_timestamp;
     }
-    g_local_timestamp = timestamp;
 
     /* Send new move packet */
     {

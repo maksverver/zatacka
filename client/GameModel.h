@@ -30,13 +30,6 @@ struct GameParameters
 
 struct Player
 {
-    Player()
-        : col(), x(), y(), a(), timestamp(), last_move(),
-          px(), py(), pa(), pt(),
-          dead(), hole(), solid_since(), name(),
-          score_cur(), score_tot(), score_avg(), score_holes(),
-          rng_base(), rng_carry() { };
-
     unsigned    col;            /* color */
     double      x, y, a;        /* position (0 <= x,y < 1) and angle */
     int         timestamp;      /* last changed */
@@ -46,7 +39,7 @@ struct Player
     bool        dead;           /* has died? */
     int         hole;           /* generating a hole */
     int         solid_since;    /* earliest timestamp after last hole */
-    std::string name;           /* display name */
+    const char  *name;          /* display name */
     int         score_cur;      /* score this round */
     int         score_tot;      /* total score */
     int         score_avg;      /* moving average */
