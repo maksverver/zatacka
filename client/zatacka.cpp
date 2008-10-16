@@ -43,6 +43,9 @@ std::vector<int>         g_my_keys;     /* all keys in use */
 std::vector<Player>      g_players;         /* all players in the game */
 std::vector<std::string> g_names;           /* .. and their names */
 
+double g_frame_time;     /* time at which frame counter was last reset */
+int g_frame_counter;     /* frames counted since last reset */
+
 #ifdef DEBUG
 FILE *fp_trace;
 #endif
@@ -550,7 +553,19 @@ void callback(void *arg)
         forward_to(server_timestamp + 1);
         update_sprites();
     }
-    g_window->gameView()->redraw();
+
+    /* Calculate FPS */
+    g_frame_counter += 1;
+    t = time_now();
+    if (t > g_frame_time + 1)
+    {
+        if (g_frame_time > 0)
+        {
+            g_window->setFPS(g_frame_counter/(t - g_frame_time));
+        }
+        g_frame_time    = t;
+        g_frame_counter = 0;
+    }
 
     Fl::repeat_timeout(1.0/CLIENT_FPS, callback, arg);
 }
