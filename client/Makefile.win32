@@ -1,5 +1,7 @@
 include Makefile
 
+LDLIBS+=-lws2_32
+
 all: zatacka.exe
 
 zatacka.exe: zatacka

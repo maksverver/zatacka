@@ -9,7 +9,7 @@
 #include <Fl/Fl_Choice.H>
 #include <Fl/Fl_Input.H>
 #include <Fl/Fl_Pack.H>
-#include <FL/fl_ask.H>
+#include <Fl/fl_ask.H>
 #include <Fl/fl_draw.H>
 #include <Fl/x.H>
 #include <vector>
