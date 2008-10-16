@@ -11,9 +11,7 @@ General:
 
 Client:
  - proper full screen mode on Windows
- - full game view redrawing is slow; game view should use damage() correctly.
-   (this was disabled because of rendering errors on Windows, when lagging;
-    possibly caused by too many overlapping damage regions present).
+ - make game window resizable [1.0]
 
 Server:
  - server console [1.1]

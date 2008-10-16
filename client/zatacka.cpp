@@ -553,7 +553,6 @@ void callback(void *arg)
         forward_to(server_timestamp + 1);
         update_sprites();
     }
-    g_window->gameView()->redraw();
 
     /* Calculate FPS */
     g_frame_counter += 1;
