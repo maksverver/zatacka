@@ -22,11 +22,13 @@ typedef struct Point
 __attribute__((__noinline__))
 static int draw_poly(Field *field, const Point *pts, int npt, int col)
 {
-    int y, x, n, res = 0;
+    int y, x, n, res;
     int prv_x1, prv_x2;
     int cur_x1, cur_x2;
     int nxt_x1, nxt_x2;
     int hit_x1, hit_x2;
+
+    res = 0;
 
     /* Find min/max y coordinates */
     int y1, y2;
@@ -68,8 +70,9 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
                 continue;
             }
 
-            /* this makes the computation below a little more consistent
-               and prevents false overlap detected in touching polygons */
+            /* this is essential to prevent false overlap detection; it ensures
+               that a line contains the same points even if its endpoints are
+               swapped (which wouldn't be true otherwise). */
             if (p->x > q->x || (p->x == q->x && p->y > q->y))
             {
                 const Point *r = p;
@@ -84,8 +87,8 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
                          (q->y - p->y + (p->y <= q->y ? 1 : -1));
         }
 
-        if (nxt_x1 < 0) { nxt_x1 = 0; res = 256; }
-        if (nxt_x2 >= FIELD_SIZE) { nxt_x2 = FIELD_SIZE - 1; res = 256; }
+        if (nxt_x1 < 0) nxt_x1 = 0, res = 256;
+        if (nxt_x2 >= FIELD_SIZE) nxt_x2 = FIELD_SIZE - 1, res = 256;
 
         /* Hit-test current scanline inside the polygon */
         hit_x1 = cur_x1 + 1;
@@ -123,7 +126,7 @@ int field_line( Field *field,
                 double x2, double y2, double a2,
                 int col, Rect *rect )
 {
-    double th = 7e-3*FIELD_SIZE;    /* thickness */
+    const double th = 7e-3*FIELD_SIZE;    /* thickness */
 
     double dx1 = -sin(a1), dy1 = cos(a1);
     double dx2 = -sin(a2), dy2 = cos(a2);
@@ -141,9 +144,9 @@ int field_line( Field *field,
     if (rect != NULL)
     {
         int n;
-        rect->x1 = rect->y1 = FIELD_SIZE;
-        rect->x2 = rect->y2 = 0;
-        for (n = 0; n < 4; ++n)
+        rect->x1 = rect->x2 = pts[0].x;
+        rect->y1 = rect->y2 = pts[0].y;
+        for (n = 1; n < 4; ++n)
         {
             if (pts[n].x < rect->x1) rect->x1 = pts[n].x;
             if (pts[n].x > rect->x2) rect->x2 = pts[n].x;
@@ -154,8 +157,8 @@ int field_line( Field *field,
         rect->y2 += 1;
         if (rect->x1 < 0) rect->x1 = 0;
         if (rect->y1 < 0) rect->y1 = 0;
-        if (rect->x2 >= FIELD_SIZE) rect->x2 = 0;
-        if (rect->y2 >= FIELD_SIZE) rect->y2 = 0;
+        if (rect->x2 > FIELD_SIZE) rect->x2 = FIELD_SIZE;
+        if (rect->y2 > FIELD_SIZE) rect->y2 = FIELD_SIZE;
     }
 
     return draw_poly(field, pts, 4, col);
