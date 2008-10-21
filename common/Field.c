@@ -121,25 +121,23 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
     return res;
 }
 
-int field_line( Field *field,
-                double x1, double y1, double a1,
-                double x2, double y2, double a2,
+int field_line( Field *field, const Position *p, const Position *q,
                 int col, Rect *rect )
 {
     const double th = 7e-3*FIELD_SIZE;    /* thickness */
 
-    double dx1 = -sin(a1), dy1 = cos(a1);
-    double dx2 = -sin(a2), dy2 = cos(a2);
+    double dx1 = -sin(p->a), dy1 = cos(p->a);
+    double dx2 = -sin(q->a), dy2 = cos(q->a);
 
     Point pts[4] = {
-        { (int)(FIELD_SIZE*x1 + 0.5 - 0.5*th*dx1),
-          (int)(FIELD_SIZE*y1 + 0.5 - 0.5*th*dy1) },
-        { (int)(FIELD_SIZE*x1 + 0.5 + 0.5*th*dx1),
-          (int)(FIELD_SIZE*y1 + 0.5 + 0.5*th*dy1) },
-        { (int)(FIELD_SIZE*x2 + 0.5 + 0.5*th*dx2),
-          (int)(FIELD_SIZE*y2 + 0.5 + 0.5*th*dy2) },
-        { (int)(FIELD_SIZE*x2 + 0.5 - 0.5*th*dx2),
-          (int)(FIELD_SIZE*y2 + 0.5 - 0.5*th*dy2) } };
+        { (int)(FIELD_SIZE*p->x + 0.5 - 0.5*th*dx1),
+          (int)(FIELD_SIZE*p->y + 0.5 - 0.5*th*dy1) },
+        { (int)(FIELD_SIZE*p->x + 0.5 + 0.5*th*dx1),
+          (int)(FIELD_SIZE*p->y + 0.5 + 0.5*th*dy1) },
+        { (int)(FIELD_SIZE*q->x + 0.5 + 0.5*th*dx2),
+          (int)(FIELD_SIZE*q->y + 0.5 + 0.5*th*dy2) },
+        { (int)(FIELD_SIZE*q->x + 0.5 - 0.5*th*dx2),
+          (int)(FIELD_SIZE*q->y + 0.5 - 0.5*th*dy2) } };
 
     if (rect != NULL)
     {

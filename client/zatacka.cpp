@@ -53,9 +53,9 @@ FILE *fp_trace;
 static void player_reset_prediction(int n)
 {
     Player &pl = g_players[n];
-    pl.px = g_players[n].x;
-    pl.py = g_players[n].y;
-    pl.pa = g_players[n].a;
+    pl.ppos.x = g_players[n].pos.x;
+    pl.ppos.y = g_players[n].pos.y;
+    pl.ppos.a = g_players[n].pos.a;
     pl.pt = g_players[n].timestamp;
 }
 
@@ -64,14 +64,8 @@ static bool player_update_prediction(int n, Move move)
     Player &pl = g_players[n];
     if (pl.dead) return false;
 
-    int turn_dir = (move == MOVE_TURN_LEFT)  ? +1 :
-                   (move == MOVE_TURN_RIGHT) ? -1 : 0;
-    pl.pa += turn_dir*g_gp.turn_rate;
-    if (pl.pt >= g_gp.warmup)
-    {
-        pl.px += g_gp.move_rate*cos(pl.pa);
-        pl.py += g_gp.move_rate*sin(pl.pa);
-    }
+    double move_rate = pl.pt >= g_gp.warmup ? g_gp.move_rate : 0;
+    position_update(&pl.ppos, move, move_rate, g_gp.turn_rate);
     ++pl.pt;
     return true;
 }
@@ -85,7 +79,7 @@ static void update_sprites()
         {
             if (!player_update_prediction(n, (Move)pl.last_move)) break;
         }
-        g_window->gameView()->setSprite(n, pl.px, pl.py, pl.pa);
+        g_window->gameView()->setSprite(n, pl.ppos.x, pl.ppos.y, pl.ppos.a);
     }
 }
 
@@ -211,11 +205,11 @@ static void handle_STRT(unsigned char *buf, size_t len)
         if (pos + 10 > len) fatal("invalid STRT packet received");
         g_players[n].col = fl_rgb_color(buf[pos], buf[pos + 1], buf[pos + 2]);
         pos += 3;
-        g_players[n].x = (256*buf[pos] + buf[pos + 1])/65536.0;
+        g_players[n].pos.x = (256*buf[pos] + buf[pos + 1])/65536.0;
         pos += 2;
-        g_players[n].y = (256*buf[pos] + buf[pos + 1])/65536.0;
+        g_players[n].pos.y = (256*buf[pos] + buf[pos + 1])/65536.0;
         pos += 2;
-        g_players[n].a = (256*buf[pos] + buf[pos + 1])/65536.0*(2*M_PI);
+        g_players[n].pos.a = (256*buf[pos] + buf[pos + 1])/65536.0*(2*M_PI);
         pos += 2;
         int name_len = buf[pos++];
         if (pos + name_len > len) fatal("invalid STRT packet received");
@@ -223,7 +217,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
         g_players[n].name = g_names[n].c_str();
         pos += name_len;
         info( "Player %d: name=%s x=%.3f y=%.3f a=%.3f", n, g_players[n].name,
-              g_players[n].x, g_players[n].y, g_players[n].a );
+              g_players[n].pos.x, g_players[n].pos.y, g_players[n].pos.a );
         g_players[n].timestamp = 0;
         g_players[n].rng_base  = n^g_gp.gameid;
         g_players[n].rng_carry = 0;
@@ -287,29 +281,7 @@ static void handle_SCOR(unsigned char *buf, size_t len)
     g_window->scoreView()->update(g_players);
 }
 
-static void player_advance(int n, int turn_dir)
-{
-    Player &pl = g_players[n];
-
-    int v = (pl.timestamp < g_gp.warmup) ? 0 : 1;
-
-    /* First turn */
-    double na = pl.a + turn_dir*g_gp.turn_rate;
-    double nx = pl.x + v*g_gp.move_rate*cos(na);
-    double ny = pl.y + v*g_gp.move_rate*sin(na);
-
-    /* Then move ahead */
-    if (v > 0 && pl.hole == 0)
-    {
-        g_window->gameView()->line(pl.x, pl.y, pl.a, nx, ny, na, n);
-    }
-
-    pl.x = nx;
-    pl.y = ny;
-    pl.a = na;
-}
-
-static void player_move(int n, int move)
+static void player_move(int n, Move move)
 {
     Player &pl = g_players[n];
 
@@ -335,19 +307,35 @@ static void player_move(int n, int move)
         pl.hole = g_gp.hole_length_min +
                  pl.rng_base/g_gp.hole_probability %
                  (g_gp.hole_length_max - g_gp.hole_length_min + 1);
+
     }
 
     switch (move)
     {
-    case 0: fatal("0 move passed to player_move!"); return;
+    case MOVE_NONE:
+        fatal("MOVE_NONE passed to player_move!");
+        return;
+
     default:
-        error("invalid move (%d) interpreted as 1", (int)move);
-        move = 1;
+        error("invalid move (%d) interpreted as MOVE_FORWARD", (int)move);
+        move = MOVE_FORWARD;
         /* falls through */
-    case 1: player_advance(n,  0); break;  /* move ahead */
-    case 2: player_advance(n, +1); break;  /* turn left */
-    case 3: player_advance(n, -1); break;  /* turn right */
-    case 4:                                     /* dead */
+    case MOVE_FORWARD:
+    case MOVE_TURN_LEFT:
+    case MOVE_TURN_RIGHT:
+        {
+            double move_rate = pl.timestamp < g_gp.warmup ? 0 : g_gp.move_rate;
+            Position npos = pl.pos;
+            position_update(&npos, move, move_rate, g_gp.turn_rate);
+            if (move_rate > 0 && pl.hole == 0)
+            {
+                g_window->gameView()->line(&pl.pos, &npos, n);
+            }
+            g_players[n].pos = npos;
+        };
+        break;
+
+    case MOVE_DEAD:
         if (!pl.dead)
         {
             pl.dead = true;
@@ -504,7 +492,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
               i < g_gp.move_backlog; ++i)
         {
             if (moves[i] == 0) break;  /* further moves not yet known */
-            player_move(n, moves[i]);
+            player_move(n, (Move)moves[i]);
         }
 
         if (g_my_indices[n] == -1) player_reset_prediction(n);

@@ -3,14 +3,8 @@
 
 #include <string>
 
-enum Move
-{
-    MOVE_NONE       = 0,
-    MOVE_FORWARD    = 1,
-    MOVE_TURN_LEFT  = 2,
-    MOVE_TURN_RIGHT = 3,
-    MOVE_DEAD       = 4
-};
+#include "../common/Movement.h"
+#include "../common/Protocol.h"
 
 struct GameParameters
 {
@@ -31,10 +25,10 @@ struct GameParameters
 struct Player
 {
     unsigned    col;            /* color */
-    double      x, y, a;        /* position (0 <= x,y < 1) and angle */
+    Position    pos;            /* player position */
     int         timestamp;      /* last changed */
     int         last_move;      /* last move (used for predictions) */
-    double      px, py, pa;     /* predicted position */
+    Position    ppos;           /* predicted position */
     int         pt;             /* predicted timestamp */
     bool        dead;           /* has died? */
     int         hole;           /* generating a hole */

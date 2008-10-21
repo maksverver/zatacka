@@ -13,12 +13,10 @@ GameView::~GameView()
     if (offscr_created) fl_delete_offscreen(offscr);
 }
 
-void GameView::line( double px1, double py1, double pa1,
-                     double px2, double py2, double pa2,
-                     int n )
+void GameView::line(const Position *p, const Position *q, int n)
 {
     Rect r;
-    field_line(&m_field, px1, py1, pa1, px2, py2, pa2, n + 1, &r);
+    field_line(&m_field, p, q, n + 1, &r);
 
     int w = this->w(), h = this->h();
     int x1 = r.x1*w/FIELD_SIZE, x2 = r.x2*w/FIELD_SIZE + 1;

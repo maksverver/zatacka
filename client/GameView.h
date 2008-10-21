@@ -25,9 +25,7 @@ public:
     GameView(int x, int y, int w, int h, bool antialiasing);
     ~GameView();
 
-    void line( double x1, double y1, double a1,
-               double x2, double y2, double a2,
-               int n );
+    void line(const Position *p, const Position *q, int n);
 
     Fl_Color spriteColor(int n) { return sprites[n].col; };
     Sprite::SpriteType spriteType(int n) { return sprites[n].type; }

@@ -1,6 +1,8 @@
 #ifndef FIELD_H_INCLUDED
 #define FIELD_H_INCLUDED
 
+#include "Movement.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -25,9 +27,7 @@ typedef struct Rect
    If rect is not NULL, it is updated to reflect the rectangle of pixels
    affected by the drawing operation.
 */
-int field_line( Field *field,
-                double x1, double y1, double a1,
-                double x2, double y2, double a2,
+int field_line( Field *field, const Position *p, const Position *q,
                 int col, Rect *rect );
 
 #ifdef __cplusplus

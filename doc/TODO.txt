@@ -4,11 +4,6 @@ General:
    methods, etc.) more consistent. (Also, introduce constants for magic
    numers where appropriate).
 
- Potential bug:
- - the correctness of the line segment rendering code
-   (in particular, the code that blanks out overlapping segments)
-   seems to depend on compiler settings. This is ugly!
-
 Client:
  - proper full screen mode on Windows
  - make game window resizable [1.0]

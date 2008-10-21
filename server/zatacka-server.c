@@ -4,6 +4,7 @@
 #include <common/Colors.h>
 #include <common/Debug.h>
 #include <common/Field.h>
+#include <common/Movement.h>
 #include <common/Protocol.h>
 #include <common/Time.h>
 
@@ -43,7 +44,7 @@ typedef int socklen_t;
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
-#define TURN_RATE             (50)
+#define TURN_RATE             (48)
 #define MOVE_RATE              (6)
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY      (60)
@@ -72,7 +73,7 @@ typedef struct Player
     int             dead_since;
     char            name[MAX_NAME_LEN + 1];
     struct RGB      color;
-    double          x, y, a;    /* 0 <= x,y < 1; 0 < a <= 2pi */
+    Position        pos;
 
     /* Scores */
     int             score_total;
@@ -505,11 +506,16 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     pl->my_holeid = 1 + (g_num_holes++)%255;
                 }
 
-                int a = (m == 2) ? +1 : (m == 3) ? -1 : 0;
                 int v = (pl->timestamp < WARMUP ? 0 : 1);
+                int a = (m == MOVE_TURN_LEFT)  ? +1 :
+                        (m == MOVE_TURN_RIGHT) ? -1 : 0;
 
                 /* Register movement during warmup */
-                if (a != 0 && pl->timestamp < WARMUP) pl->has_moved = true;
+                if ( pl->timestamp < WARMUP &&
+                     (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
+                {
+                    pl->has_moved = true;
+                }
 
                 if (fp_replay != NULL)
                 {
@@ -518,15 +524,15 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                              pl->timestamp, pl->index, a, (pl->hole ? 2 : v) );
                 }
 
-                /* Calculate new angle/position */
-                double na = pl->a + a*2.0*M_PI/TURN_RATE;
-                double nx = pl->x + v*1e-3*MOVE_RATE*cos(na);
-                double ny = pl->y + v*1e-3*MOVE_RATE*sin(na);
+                /* Calculate new position */
+                Position npos = pl->pos;
+                position_update( &npos, (Move)m, v*1e-3*MOVE_RATE,
+                                                 2.0*M_PI/TURN_RATE );
 
                 if (v > 0)
                 {
                     /* Fill and test new line segment */
-                    if ( field_line( &g_field, pl->x, pl->y, pl->a, nx, ny, na,
+                    if ( field_line( &g_field, &pl->pos, &npos,
                                      pl->hole > 0 ? -1 : pl->index + 1, NULL )
                          != 0 )
                     {
@@ -534,8 +540,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     }
 
                     /* Detect hole crossing */
-                    int holeid = field_line(
-                        &g_holes, pl->x, pl->y, pl->a, nx, ny, na,
+                    int holeid = field_line( &g_holes, &pl->pos, &npos,
                         (pl->hole > 0 ? pl->my_holeid : -1), NULL );
                     if (holeid < 256 && holeid != pl->cross_holeid)
                     {
@@ -548,9 +553,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     }
                 }
 
-                pl->a = na;
-                pl->x = nx;
-                pl->y = ny;
+                pl->pos = npos;
 
                 if (pl->hole > 0)
                 {
@@ -696,9 +699,9 @@ static void restart_game()
         memset(pl->moves, 0, sizeof(pl->moves));
         pl->has_moved       = false;
         pl->dead_since      = -1;
-        pl->x               = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->y               = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->a               = 2.0*M_PI*rand()/RAND_MAX;
+        pl->pos.x           = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->pos.y           = 0.02 + 0.96*rand()/RAND_MAX;
+        pl->pos.a           = 2.0*M_PI*rand()/RAND_MAX;
         pl->hole            = 0;
         pl->solid_since     = 0;
         pl->my_holeid       = 0;
@@ -759,7 +762,9 @@ static void restart_game()
             for (int n = 0; n < g_num_players; ++n)
             {
                 fprintf( fp_replay, "%.6f %.6f %.6f\n",
-                         g_players[n]->x, g_players[n]->y, g_players[n]->a );
+                         g_players[n]->pos.x,
+                         g_players[n]->pos.y,
+                         g_players[n]->pos.a );
             }
         }
         else
@@ -796,9 +801,9 @@ static void restart_game()
         packet[pos++] = pl->color.r;
         packet[pos++] = pl->color.g;
         packet[pos++] = pl->color.b;
-        int x = (int)(pl->x*65536);
-        int y = (int)(pl->y*65536);
-        int a = (int)(pl->a/(2.0*M_PI)*65536);
+        int x = (int)(pl->pos.x*65536);
+        int y = (int)(pl->pos.y*65536);
+        int a = (int)(pl->pos.a/(2.0*M_PI)*65536);
         packet[pos++] = (x>>8)&255;
         packet[pos++] = (x>>0)&255;
         packet[pos++] = (y>>8)&255;
