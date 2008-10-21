@@ -1,17 +1,20 @@
-General:
+1.0:
  - name & branding [1.0]
+ - SERVER: resolve bug where a player is sometimes killed for no apparent reason
+
+1.1:
+ - SERVER: configurable game parameters
+ - SERVER: game console (view/change parameters, kick players, etc.)
+ - CLIENT: make game window resizable
+ - CLIENT: implement proper full screen mode on Windows (how?)
+
+General:
  - clean up code, and make naming conventions (of classes, variables,
    methods, etc.) more consistent. (Also, introduce constants for magic
    numers where appropriate).
 
-Client:
- - proper full screen mode on Windows
- - make game window resizable [1.0]
-
-Server:
- - server console [1.1]
-
- Potential bug:
+Potential bug:
   - When a client is disconnected, it may have players active, which are pointed
     to by the g_players array. If a new client connects, the active player
     structure is reset, which may cause weird behaviour in the server.
+    (NB. none of this has been observed so far)

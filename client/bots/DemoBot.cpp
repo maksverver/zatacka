@@ -38,9 +38,9 @@ Move DemoBot::move( int timestamp, const Player *players,
     if (timestamp < warmup)
     {
         /* Turn towards center of field */
-        const Player &pl = players[player_index];
-        double a = atan2(0.5 - pl.y, 0.5 - pl.x);
-        double b = pl.a - a;
+        const Position &pos = players[player_index].pos;
+        double a = atan2(0.5 - pos.y, 0.5 - pos.x);
+        double b = pos.a - a;
         while (b < -M_PI) b += 2.0*M_PI;
         while (b > +M_PI) b -= 2.0*M_PI;
         if (b < -0.1) return MOVE_TURN_LEFT;
