@@ -300,15 +300,14 @@ static void player_kill(Player *pl)
             /* End the game after a fixed number of seconds */
             g_deadline = g_timestamp + VICTORY_TIME;
         }
-
         /* Give remaining players a point.
-        NB. if two players die in the same turn, they both get a point from
-            each other's death. */
+           NB. if two players die in the same turn, they both get a point from
+           each other's death. */
         for (int n = 0; n < g_num_players; ++n)
         {
             if (g_players[n] == pl) continue;
             if ( g_players[n]->dead_since == -1 ||
-                g_players[n]->dead_since >= g_timestamp )
+                 g_players[n]->dead_since >= g_timestamp - (g_players[n] > pl) )
             {
                 g_players[n]->score_total += 1;
                 g_players[n]->score_moving_sum += 1;
