@@ -172,23 +172,27 @@ bool Config::show_window()
 
     Fl_Group *display = new Fl_Group(10, 30, 280, 90, "Display");
     display->box(FL_DOWN_FRAME);
-    w_resolution = new Fl_Choice(110, 50, 170, 20, "Window size: ");
+    w_resolution = new Fl_Choice(110, 50, 170, 20, "&Window size: ");
     for (int n = 0; n < res_count; ++n)
     {
         w_resolution->add(res_str[n], "", NULL);
     }
     w_resolution->value(m_resolution);
-    w_fullscreen = new Fl_Check_Button(110, 70, 170, 20, "Fullscreen");
-    w_fullscreen->value(m_fullscreen);
-    w_antialiasing = new Fl_Check_Button(110, 90, 170, 20, "Anti-aliasing");
+    w_antialiasing = new Fl_Check_Button(110, 70, 170, 20, "&Anti-aliasing");
     w_antialiasing->value(m_antialiasing);
+    w_fullscreen = new Fl_Check_Button(110, 90, 170, 20, "&Fullscreen");
+#ifdef WIN32
+    w_fullscreen->deactivate();
+#else
+    w_fullscreen->value(m_fullscreen);
+#endif
     display->end();
 
     Fl_Group *network = new Fl_Group(10, 150, 280, 70, "Network");
     network->box(FL_DOWN_FRAME);
-    w_hostname = new Fl_Input(110, 170, 160, 20, "Host name: ");
+    w_hostname = new Fl_Input(110, 170, 160, 20, "&Host name: ");
     w_hostname->value(m_hostname.c_str());
-    w_port = new Fl_Input(110, 190, 160, 20, "Port number: ");
+    w_port = new Fl_Input(110, 190, 160, 20, "&Port number: ");
     char port_buf[32];
     sprintf(port_buf, "%d", m_port);
     w_port->value(port_buf);
@@ -221,8 +225,9 @@ bool Config::show_window()
     }
     players->end();
 
-    Fl_Button *w_start = new Fl_Button(10, 450, 280, 30, "Start");
+    Fl_Button *w_start = new Fl_Button(10, 450, 280, 30, "&Start");
     w_start->callback(start_cb, this);
+    Fl::focus(w_start);
 
     win->end();
     win->show();
