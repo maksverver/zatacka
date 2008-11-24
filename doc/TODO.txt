@@ -1,6 +1,8 @@
 1.0:
  - name & branding [1.0]
  - SERVER: resolve bug where a player is sometimes killed for no apparent reason
+ - CLIENT: windows client crashes when game goes out of sync
+           (requires proper debugging support on windows)
 
 1.1:
  - SERVER: configurable game parameters
