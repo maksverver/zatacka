@@ -283,7 +283,13 @@ static void message(const char *fmt, ...)
 
 static void player_kill(Player *pl)
 {
-    assert(pl->in_use);
+    if (!pl->in_use)
+    {
+        /* this occasionally happens if a client is disconnected while a 
+           its MOVE packet is being processed (or maybe in other situations). */
+        warn("player_kill() called on player slot that is not in use\n");
+        return;
+    }
 
     if (pl->dead_since != -1) return;
 
