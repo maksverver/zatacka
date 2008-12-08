@@ -19,8 +19,8 @@ void GameView::line(const Position *p, const Position *q, int n)
     field_line(&m_field, p, q, n + 1, &r);
 
     int w = this->w(), h = this->h();
-    int x1 = r.x1*w/FIELD_SIZE, x2 = r.x2*w/FIELD_SIZE + 1;
-    int y1 = r.y1*h/FIELD_SIZE, y2 = r.y2*h/FIELD_SIZE + 1;
+    int x1 = r.x1*w/FIELD_SIZE, x2 = (r.x2*w + FIELD_SIZE - 1)/FIELD_SIZE;
+    int y1 = r.y1*h/FIELD_SIZE, y2 = (r.y2*h + FIELD_SIZE - 1)/FIELD_SIZE;
 
     fl_begin_offscreen(offscr);
     if (antialiasing)
