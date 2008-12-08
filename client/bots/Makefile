@@ -1,10 +1,16 @@
 include ../../base.mk
 CXXFLAGS+=-I../.. -fPIC
 
-all: DemoBot.so
+all: DemoBot.so Tipsy.so Twirly.so
 
-%.so: %.o
-	$(CXX) -fPIC -shared "$<" -o "$@"
+%.so: %.o ../../common/common.a
+	$(CXX) -fPIC -shared $^ -o $@
+
+Twirly.so: Twirly.o SimpleSearch.o ../../common/common.a
+	$(CXX) -fPIC -shared $^ -o $@
+
+Tipsy.so: Tipsy.o SimpleSearch.o ../../common/common.a
+	$(CXX) -fPIC -shared $^ -o $@
 
 clean:
 	rm -f *.o
