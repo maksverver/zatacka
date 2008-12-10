@@ -51,7 +51,7 @@ int SimpleSearch::search(Position pos, int depth, Move *move_out)
 Move SimpleSearch::move( int timestamp, const Player *players,
                          int player_index, const Field &field_arg )
 {
-    const Position &pos = players[player_index].pos;
+    const Position &pos = players[player_index].ppos;
 
     field = &field_arg;
 
