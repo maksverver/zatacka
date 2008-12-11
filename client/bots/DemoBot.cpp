@@ -17,7 +17,7 @@ private:
 };
 
 /* This function is called to created instances of our bot class. */
-extern "C" PlayerController *create_bot() { return new DemoBot(); }
+extern "C" PlayerController *create_bot() { return new DemoBot; }
 
 /* A new game starts: clean up old game stat and reinitialize */
 void DemoBot::restart(const GameParameters &gp)

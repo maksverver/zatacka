@@ -1,6 +1,6 @@
 include Makefile
 
-all: DemoBot.dll
+all: DemoBot.dll Tipsy.dll Twirly.dll
 
 %.dll: %.so
 	cp "$<" "$@"
