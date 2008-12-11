@@ -143,6 +143,9 @@ static FILE *fp_replay;         /* Record replay to this file */
     Function prototypes
 */
 
+/* Return a uniformly random integer in the range [lo,hi] (inclusive!) */
+static int rand_int(int lo, int hi);
+
 /* Three-way comparison of two RGB colors */
 static int rgb_cmp(const struct RGB *c, const struct RGB *d);
 
@@ -188,6 +191,17 @@ int main(int argc, char *argv[]);
 
 
 /* Function definitions */
+
+static int rand_int(int lo, int hi)
+{
+    assert(lo <= hi);
+    assert(hi - lo <= RAND_MAX);
+    int range = hi - lo + 1;  /* possible int overflow */
+    int lim = (RAND_MAX/range)*range;
+    int i;
+    do { i = rand(); } while (i >= lim);
+    return i%range;
+}
 
 static int rgb_cmp(const struct RGB *c, const struct RGB *d)
 {
@@ -712,9 +726,9 @@ static void restart_game()
         memset(pl->moves, 0, sizeof(pl->moves));
         pl->has_moved       = false;
         pl->dead_since      = -1;
-        pl->pos.x           = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->pos.y           = 0.02 + 0.96*rand()/RAND_MAX;
-        pl->pos.a           = 2.0*M_PI*rand()/RAND_MAX;
+        pl->pos.x           = rand_int(2048, 65536 - 2048);
+        pl->pos.y           = rand_int(2048, 65536 - 2048);
+        pl->pos.a           = rand_int(0, 65535);
         pl->hole            = 0;
         pl->solid_since     = 0;
         pl->my_holeid       = 0;
@@ -816,9 +830,9 @@ static void restart_game()
         packet[pos++] = pl->color.r;
         packet[pos++] = pl->color.g;
         packet[pos++] = pl->color.b;
-        int x = (int)(pl->pos.x*65536);
-        int y = (int)(pl->pos.y*65536);
-        int a = (int)(pl->pos.a/(2.0*M_PI)*65536);
+        int x = (int)pl->pos.x;
+        int y = (int)pl->pos.y;
+        int a = (int)pl->pos.a;
         packet[pos++] = (x>>8)&255;
         packet[pos++] = (x>>0)&255;
         packet[pos++] = (y>>8)&255;
@@ -830,6 +844,15 @@ static void restart_game()
         assert(pos + name_len < MAX_PACKET_LEN);
         memcpy(&packet[pos], pl->name, name_len);
         pos += name_len;
+    }
+
+    /* Convert positions to more practical format */
+    for (int i = 0; i < g_num_players; ++i)
+    {
+        Player *pl = g_players[i];
+        pl->pos.x *= 1.0/65536;
+        pl->pos.y *= 1.0/65536;
+        pl->pos.a *= 2*M_PI/65536;
     }
 
     /* Send start packet to all clients */
