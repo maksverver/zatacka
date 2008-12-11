@@ -200,7 +200,7 @@ static int rand_int(int lo, int hi)
     int lim = (RAND_MAX/range)*range;
     int i;
     do { i = rand(); } while (i >= lim);
-    return i%range;
+    return lo + i%range;
 }
 
 static int rgb_cmp(const struct RGB *c, const struct RGB *d)
