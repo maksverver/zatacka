@@ -1,7 +1,7 @@
 #include "SimpleSearch.h"
 #include <math.h>
 
-static const int max_depth = 5;
+static const int max_depth = 7;
 
 SimpleSearch::SimpleSearch()
 {
@@ -26,7 +26,7 @@ int SimpleSearch::search(Position pos, int depth, Move *move_out)
     {
         int col = 0;
         Position old_pos, new_pos = pos;
-        for (int pass = 0; pass < 4 && col == 0; ++pass)
+        for (int pass = 0; pass < 2 + 2*depth && col == 0; ++pass)
         {
             old_pos = new_pos;
             position_update(&new_pos, moves[i], gp.move_rate, gp.turn_rate);
