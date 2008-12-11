@@ -12,12 +12,6 @@ typedef struct Point
    Returns the maximum overlapping value or 256 if out-of-bounds.
    If col is negative, the field is not modified; this is useful to test for
    collision without drawing.
-
-   FIXME: correctness seems to depend on compiler settings used!
-          figure out what causes this (excess double precision in field_line?)
-          and how it can be fixed.
-
-          (NB. this function has been modified since; this may no longer apply)
 */
 __attribute__((__noinline__))
 static int draw_poly(Field *field, const Point *pts, int npt, int col)
@@ -121,6 +115,12 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
     return res;
 }
 
+/* For debugging: */
+#include "Debug.h"
+#include <stdio.h>
+#define POOR(pt) (OOR(pt.x) || OOR(pt.y))
+#define OOR(x) ((x) < -100 || (x) > FIELD_SIZE+100)
+
 int field_line( Field *field, const Position *p, const Position *q,
                 int col, Rect *rect )
 {
@@ -138,6 +138,19 @@ int field_line( Field *field, const Position *p, const Position *q,
           (int)(FIELD_SIZE*q->y + 0.5 + 0.5*th*dy2) },
         { (int)(FIELD_SIZE*q->x + 0.5 - 0.5*th*dx2),
           (int)(FIELD_SIZE*q->y + 0.5 - 0.5*th*dy2) } };
+
+    /* For debugging: */
+    if (POOR(pts[0]) || POOR(pts[1]) || POOR(pts[2]) || POOR(pts[3]))
+    {
+        printf("Floating-point bug!\n");
+	printf("p=(%f,%f,%f)\n", p->x, p->y, p->a);
+        hex_dump((void*)p, sizeof(*p));
+	printf("q=(%f,%f,%f)\n", q->x, q->y, q->a);
+        hex_dump((void*)q, sizeof(*q));
+	int n;
+	for (n = 0; n < 4; ++n) printf("(%d,%d) ", pts[n].x, pts[n].y);
+	printf("\n\n");
+    }
 
     if (rect != NULL)
     {

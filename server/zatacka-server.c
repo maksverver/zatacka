@@ -56,7 +56,11 @@ typedef int socklen_t;
 #define WARMUP              (3*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
+#ifdef REPLAY
+#ifndef REPLAYDIR
 #define REPLAYDIR           "replay"
+#endif /* ndef REPLAYDIR */
+#endif /* def REPLAY */
 
 typedef struct Player
 {
@@ -130,7 +134,10 @@ static Client g_clients[MAX_CLIENTS];
 static Player *g_players[MAX_PLAYERS];
 static unsigned char g_field[FIELD_SIZE][FIELD_SIZE];
 static unsigned char g_holes[FIELD_SIZE][FIELD_SIZE];
+
+#ifdef REPLAY
 static FILE *fp_replay;         /* Record replay to this file */
+#endif
 
 /*
     Function prototypes
@@ -218,7 +225,9 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
         if ( send(cl->fd_stream, header, 2, 0) != 2 ||
              send(cl->fd_stream, buf, len, 0) != (ssize_t)len )
         {
-            warn("reliable send() failed");
+            info("reliable send() failed");
+
+            /* we must not provide a reason, to prevent an infinite send loop */
             client_disconnect(cl, NULL);
         }
     }
@@ -228,7 +237,7 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
                     (struct sockaddr*)&cl->sa_remote,
                     sizeof(cl->sa_remote) ) != (ssize_t)len)
         {
-            warn("unreliable send() failed");
+            info("unreliable send() failed");
         }
     }
 }
@@ -285,8 +294,8 @@ static void player_kill(Player *pl)
 {
     if (!pl->in_use)
     {
-        /* this occasionally happens if a client is disconnected while a 
-           its MOVE packet is being processed (or maybe in other situations). */
+        /* this occasionally happens if a client is disconnected while its MOVE
+           packet is being processed (or maybe in other situations). */
         warn("player_kill() called on player slot that is not in use\n");
         return;
     }
@@ -454,7 +463,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
     if (gameid != g_gameid)
     {
-        warn( "(MOVE) packet with invalid game id from client %d "
+        info( "(MOVE) packet with invalid game id from client %d "
               "(received %d; expected %d)", cl - g_clients, gameid, g_gameid);
         return;
     }
@@ -511,23 +520,22 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     pl->my_holeid = 1 + (g_num_holes++)%255;
                 }
 
+                /* Calculate movement */
                 int v = (pl->timestamp < WARMUP ? 0 : 1);
                 int a = (m == MOVE_TURN_LEFT)  ? +1 :
                         (m == MOVE_TURN_RIGHT) ? -1 : 0;
 
-                /* Register movement during warmup */
-                if ( pl->timestamp < WARMUP &&
-                     (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
-                {
-                    pl->has_moved = true;
-                }
-
+#ifdef REPLAY
                 if (fp_replay != NULL)
                 {
                     /* Write to trace: time, player, turn, move*/
                     fprintf( fp_replay, "%d %d %d %d\n",
                              pl->timestamp, pl->index, a, (pl->hole ? 2 : v) );
                 }
+#endif
+
+                /* Register movement during warmup */
+                if (!v && a) pl->has_moved = true;
 
                 /* Calculate new position */
                 Position npos = pl->pos;
@@ -631,7 +639,7 @@ static void restart_game()
     if (g_num_clients == 0) return;
     if (g_num_players > 0)
 
-#ifdef DEBUG
+#ifdef BMP
     if (g_gameid != 0)
     {
         char path[32];
@@ -681,14 +689,14 @@ static void restart_game()
 
     if (g_num_players == 0) return; /* none ready yet */
 
-    info("Starting game with %d players", g_num_players);
-
     g_num_alive = g_num_players;
 
     g_gameid = ((rand()&255) << 24) |
                ((rand()&255) << 16) |
                ((rand()&255) <<  8) |
                ((rand()&255) <<  0);
+
+    info("Starting game %08x with %d players", g_gameid, g_num_alive);
 
     memset(g_field, 0, sizeof(g_field));
     memset(g_holes, 0, sizeof(g_holes));
@@ -743,6 +751,7 @@ static void restart_game()
         }
     }
 
+#ifdef REPLAY
     {
         /* Open replay file for new game */
         char path[32];
@@ -777,6 +786,7 @@ static void restart_game()
             warn("Couldn't open file \"%s\" for writing", path);
         }
     }
+#endif
 
     /* Build start game packet */
     unsigned char packet[MAX_PACKET_LEN];

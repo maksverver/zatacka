@@ -1,6 +1,6 @@
 include ../base.mk
 
-CFLAGS+=-std=c99 -I..
+CFLAGS+=-std=c99 -I.. -DBMP -DREPLAY
 LDLIBS+=../common/common.a
 OBJS=zatacka-server.o
 

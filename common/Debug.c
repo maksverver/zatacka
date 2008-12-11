@@ -75,7 +75,7 @@ void hex_dump(unsigned char *buf, size_t len)
             {
                 printf("   ");
             }
-            if (n == 8) printf(" ");
+            if (n == 7) printf(" ");
         }
         printf("  ");
         for (n = 0; n < 16; ++n)
