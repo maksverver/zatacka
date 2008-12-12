@@ -1,14 +1,13 @@
 1.0:
  - name & branding [1.0]
- - SERVER: resolve bug where a player is sometimes killed for no apparent reason
- - CLIENT: windows client crashes when game goes out of sync
-           (requires proper debugging support on windows)
 
 1.1:
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
  - CLIENT: make game window resizable
  - CLIENT: implement proper full screen mode on Windows (how?)
+ - SERVER: don't count touching a hole as going through it
+           (allow variable line width and make hole lines smaller)
 
 General:
  - clean up code, and make naming conventions (of classes, variables,
@@ -20,3 +19,7 @@ Potential bug:
     to by the g_players array. If a new client connects, the active player
     structure is reset, which may cause weird behaviour in the server.
     (NB. none of this has been observed so far)
+  - Server sometimes kills players for no apparent reasons; debugging shows that 
+    this occurs because floating-point arithmetic in field_line sometimes yields
+    unexpectedly large values (or maybe infinity/NaN); this is non-reproducable so
+    it may be a hardware/platform bug (it only occurs on one system).
