@@ -613,25 +613,40 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
 static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
 {
-    (void)cl;
+    size_t pos = 1;
 
-    unsigned char *msg = &buf[1];
-    size_t msg_len = len - 1;
+    /* Get player name */
+    char name[MAX_NAME_LEN + 1];
+    if (len - pos < 1) goto malformed;
+    size_t L = buf[pos++];
+    if (L > len - pos || L > MAX_NAME_LEN) goto malformed;
+    memcpy(name, &buf[pos], L);
+    name[L] = '\0';
+    pos += L;
+    hex_dump(buf, len);
+    printf("%zd %s\n", L, name);
+
+    /* Get message text */
+    unsigned char *msg = &buf[pos];
+    size_t msg_len = len - pos;
     if (msg_len < 1) return;
     if (msg_len > 255) msg_len = 255;   /* limit chat message length */
 
+    /* Ensure player name is valid */
     Player *pl = NULL;
     for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
     {
-        if (cl->players[n].in_use)
+        if (cl->players[n].in_use && strcmp(cl->players[n].name, name) == 0)
         {
             pl = &cl->players[n];
             break;
         }
     }
-    if (!pl)
+
+    if (pl == NULL)
     {
-        warn("Chat message from unregistered player ignored.");
+        warn( "Chat message from player %s ignored (not connected to client).\n",
+              name );
         return;
     }
 
@@ -639,17 +654,24 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
     info("(CHAT) %s: %s", pl->name, msg);
 
     /* Build message packet */
-    unsigned char packet[MAX_PACKET_LEN];
-    size_t pos = 0, name_len = strlen(pl->name);
-    packet[pos++] = MRSC_MESG;
-    packet[pos++] = name_len;
-    memcpy(&packet[pos], pl->name, name_len);
-    pos += name_len;
-    for (size_t n = 0; n < msg_len; ++n)
     {
-        packet[pos++] = (msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ';
+        unsigned char packet[MAX_PACKET_LEN];
+        size_t pos = 0, name_len = strlen(pl->name);
+        packet[pos++] = MRSC_MESG;
+        packet[pos++] = name_len;
+        memcpy(&packet[pos], pl->name, name_len);
+        pos += name_len;
+        for (size_t n = 0; n < msg_len; ++n)
+        {
+            packet[pos++] = (msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ';
+        }
+        client_broadcast(packet, pos, true);
     }
-    client_broadcast(packet, pos, true);
+    return;
+
+malformed:
+    warn("Malformed CHAT message ignored.\n");
+    return;
 }
 
 static void restart_game()

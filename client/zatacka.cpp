@@ -288,6 +288,16 @@ static void handle_SCOR(unsigned char *buf, size_t len)
     g_window->scoreView()->update(g_players);
 }
 
+static void send_chat_message(const std::string &name, const std::string &text)
+{
+    std::string packet;
+    packet += (char)MRCS_CHAT;
+    packet += (char)(name.size());
+    packet += name;
+    packet += text;
+    g_cs->write(packet.data(), packet.size(), true);
+}
+
 static void player_move(int n, Move move)
 {
     Player &pl = g_players[n];
@@ -420,7 +430,7 @@ static void forward_to(int timestamp)
         {
             while (g_my_controllers[n]->retrieve_message(&text))
             {
-                send_chat_message(text);
+                send_chat_message(g_my_names[n], text);
             }
         }
 
@@ -590,10 +600,19 @@ static void disconnect()
     if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
 }
 
-void send_chat_message(const std::string &msg)
+/* Send a chat message, assuming it is send by a human player.
+   (This function is called from MainWindow) */
+void send_chat_message(const std::string &text)
 {
-    std::string packet = (char)MRCS_CHAT + msg;
-    g_cs->write(packet.data(), packet.size(), true);
+    size_t n = 0;
+    for (size_t n = 0; n < g_my_controllers.size(); ++n)
+    {
+        if (g_my_controllers[n]->human())
+        {
+            send_chat_message(g_my_names[n], text);
+            break;
+        }
+    }
 }
 
 bool is_control_key(int key)
