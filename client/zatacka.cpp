@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <utility>
 #include <math.h>
 #include <string.h>
 #include <stdarg.h>
@@ -115,6 +116,12 @@ static void handle_MESG(unsigned char *buf, size_t len)
             }
         }
         g_window->gameView()->appendMessage(name + ": " + text, col);
+    }
+
+    /* Send to player controllers */
+    for (size_t n = 0; n < g_my_controllers.size(); ++n)
+    {
+        if (name != g_my_names[n]) g_my_controllers[n]->listen(name, text);
     }
 }
 
@@ -385,8 +392,17 @@ static void forward_to(int timestamp)
             std::rotate(moves.begin(), moves.begin() + 1, moves.end());
 
             /* Fill in new moves */
-            PlayerController *pc = g_my_controllers[n];
-            Move m = pc->move(g_local_timestamp, &g_players[0], p, field);
+            Move m;
+            if (g_players[p].dead)
+            {
+                m = MOVE_FORWARD;   /* dummy move */
+            }
+            else
+            {
+                /* Use player controller to get next move */
+                PlayerController *pc = g_my_controllers[n];
+                m = pc->move(g_local_timestamp, &g_players[0], p, field);
+            }
             moves[g_gp.move_backlog - 1] = (unsigned char)m;
             player_update_prediction(p, m);
 
@@ -395,6 +411,16 @@ static void forward_to(int timestamp)
                 (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
             {
                 g_window->gameView()->setWarmup(false);
+            }
+        }
+
+        /* Process chat messages */
+        std::string text;
+        for (size_t n = 0; n < g_my_controllers.size(); ++n)
+        {
+            while (g_my_controllers[n]->retrieve_message(&text))
+            {
+                send_chat_message(text);
             }
         }
 
@@ -752,6 +778,9 @@ int main(int argc, char *argv[])
         packet[pos++] = g_my_names.size();
         for (size_t n = 0; n < g_my_names.size(); ++n)
         {
+            int flags = 0;
+            if (!g_my_controllers[n]->human()) flags |= 1;
+            packet[pos++] = flags;
             packet[pos++] = g_my_names[n].size();
             memcpy(packet + pos, g_my_names[n].data(), g_my_names[n].size());
             pos += g_my_names[n].size();

@@ -1,7 +1,7 @@
 #ifndef PROTOCOL_H_INCLUDED
 #define PROTOCOL_H_INCLUDED
 
-#define PROTOCOL_VERSION (1)
+#define PROTOCOL_VERSION (2)
 
 typedef enum Message
 {

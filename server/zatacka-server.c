@@ -75,6 +75,7 @@ typedef struct Player
     /* Player info */
     int             index;
     int             dead_since;
+    int             flags;
     char            name[MAX_NAME_LEN + 1];
     struct RGB      color;
     Position        pos;
@@ -381,9 +382,9 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         return;
     }
     cl->protocol = buf[1];
-    if (cl->protocol != 1)
+    if (cl->protocol != 2)
     {
-        client_disconnect(cl, "(HELO) unsupported protocol (expected 1)");
+        client_disconnect(cl, "(HELO) unsupported protocol (expected 2)");
         return;
     }
 
@@ -399,18 +400,23 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
     {
         Player *pl = &cl->players[p];
 
-        /* Parse name length */
-        if (pos >= len)
+        if (len - pos < 2)
         {
             client_disconnect(cl, "(HELO) truncated packet");
             return;
         }
+
+        /* Get player flags */
+        pl->flags = buf[pos++];
+
+        /* Get name length */
         size_t L = buf[pos++];
         if (L > MAX_NAME_LEN)
         {
             client_disconnect(cl, "(HELO) player name too long");
             return;
         }
+
         if (L < 1 || L > len - pos)
         {
             client_disconnect(cl, "(HELO) invalid name length");
@@ -433,6 +439,8 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
                                   "end with space");
         }
         pl->name[L] = '\0';
+
+if (pl->flags&1) printf("Player %s is a bot!\n", pl->name);
 
         /* Check availability of name */
         for (int n = 0; n < MAX_CLIENTS; ++n)

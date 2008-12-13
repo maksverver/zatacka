@@ -2,7 +2,7 @@
 #include "common.h"
 
 KeyboardPlayerController::KeyboardPlayerController(int key_left, int key_right)
-    : key_left(key_left), key_right(key_right)
+    : PlayerController(true), key_left(key_left), key_right(key_right)
 {
 }
 
@@ -11,8 +11,9 @@ void KeyboardPlayerController::restart(const GameParameters &gp)
     (void)gp;
 }
 
-Move KeyboardPlayerController::move( int timestamp, const Player *players,
-               int player_index, const Field &field )
+Move KeyboardPlayerController::move(
+    int timestamp, const Player *players,
+    int player_index, const Field &field )
 {
     (void)timestamp;
     (void)players;

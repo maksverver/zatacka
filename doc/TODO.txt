@@ -1,7 +1,12 @@
 1.0:
  - name & branding [1.0]
+ - CLIENT: notify server of AI players (protocol change!)
+ - CLIENT/SERVER: allow client to specify which player says something (protocol change!)
+ - CLIENT: bot chat interface
+ - SERVER: ensure that client speaks only for its own players
 
 1.1:
+ - SERVER: option to block AI players
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
  - CLIENT: make game window resizable
