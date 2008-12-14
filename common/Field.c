@@ -13,7 +13,6 @@ typedef struct Point
    If col is negative, the field is not modified; this is useful to test for
    collision without drawing.
 */
-__attribute__((__noinline__))
 static int draw_poly(Field *field, const Point *pts, int npt, int col)
 {
     int y, x, n, res;
@@ -121,11 +120,9 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
 #define POOR(pt) (OOR(pt.x) || OOR(pt.y))
 #define OOR(x) ((x) < -100 || (x) > FIELD_SIZE+100)
 
-int field_line( Field *field, const Position *p, const Position *q,
-                int col, Rect *rect )
+int field_line_th( Field *field, const Position *p, const Position *q,
+                   double th, int col, Rect *rect)
 {
-    const double th = 7e-3*FIELD_SIZE;    /* thickness */
-
     double dx1 = -sin(p->a), dy1 = cos(p->a);
     double dx2 = -sin(q->a), dy2 = cos(q->a);
 
@@ -143,13 +140,13 @@ int field_line( Field *field, const Position *p, const Position *q,
     if (POOR(pts[0]) || POOR(pts[1]) || POOR(pts[2]) || POOR(pts[3]))
     {
         printf("Floating-point bug!\n");
-	printf("p=(%f,%f,%f)\n", p->x, p->y, p->a);
+        printf("p=(%f,%f,%f)\n", p->x, p->y, p->a);
         hex_dump((void*)p, sizeof(*p));
-	printf("q=(%f,%f,%f)\n", q->x, q->y, q->a);
+        printf("q=(%f,%f,%f)\n", q->x, q->y, q->a);
         hex_dump((void*)q, sizeof(*q));
-	int n;
-	for (n = 0; n < 4; ++n) printf("(%d,%d) ", pts[n].x, pts[n].y);
-	printf("\n\n");
+        int n;
+        for (n = 0; n < 4; ++n) printf("(%d,%d) ", pts[n].x, pts[n].y);
+        printf("\n\n");
     }
 
     if (rect != NULL)
@@ -173,4 +170,10 @@ int field_line( Field *field, const Position *p, const Position *q,
     }
 
     return draw_poly(field, pts, 4, col);
+}
+
+int field_line( Field *field, const Position *p, const Position *q,
+                int col, Rect *rect)
+{
+    return field_line_th(field, p, q, 7e-3*FIELD_SIZE, col, rect);
 }

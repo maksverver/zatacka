@@ -604,7 +604,6 @@ static void disconnect()
    (This function is called from MainWindow) */
 void send_chat_message(const std::string &text)
 {
-    size_t n = 0;
     for (size_t n = 0; n < g_my_controllers.size(); ++n)
     {
         if (g_my_controllers[n]->human())

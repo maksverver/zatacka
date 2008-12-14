@@ -440,8 +440,6 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         }
         pl->name[L] = '\0';
 
-if (pl->flags&1) printf("Player %s is a bot!\n", pl->name);
-
         /* Check availability of name */
         for (int n = 0; n < MAX_CLIENTS; ++n)
         {
@@ -575,8 +573,8 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
                     }
 
                     /* Detect hole crossing */
-                    int holeid = field_line( &g_holes, &pl->pos, &npos,
-                        (pl->hole > 0 ? pl->my_holeid : -1), NULL );
+                    int holeid = field_line_th( &g_holes, &pl->pos, &npos,
+                        2.5, (pl->hole > 0 ? pl->my_holeid : -1), NULL );
                     if (holeid < 256 && holeid != pl->cross_holeid)
                     {
                         if (pl->cross_holeid != 0)
