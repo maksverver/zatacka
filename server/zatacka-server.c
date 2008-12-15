@@ -817,10 +817,10 @@ static void restart_game()
             }
             for (int n = 0; n < g_num_players; ++n)
             {
-                fprintf( fp_replay, "%.6f %.6f %.6f\n",
-                         g_players[n]->pos.x,
-                         g_players[n]->pos.y,
-                         g_players[n]->pos.a );
+                fprintf( fp_replay, "%d %d %d\n",
+                         (int)g_players[n]->pos.x,
+                         (int)g_players[n]->pos.y,
+                         (int)g_players[n]->pos.a );
             }
         }
         else

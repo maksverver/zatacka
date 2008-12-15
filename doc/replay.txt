@@ -19,9 +19,9 @@ Line 3..N+2:
     player name
 
 Line N+3..2N+2:
-    real: player X coordinate
-    real: player Y coordinate
-    real: player angle
+    integer: player X coordinate multiplied by 65536
+    integer: player Y coordinate multiplied by 65536
+    integer: player angle in radians multiplied by 32768/Pi
 
 Lines 2N+3..EOF:
     integer: timestamp (t; 0 < t)
