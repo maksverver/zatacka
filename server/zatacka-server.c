@@ -574,7 +574,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
                     /* Detect hole crossing */
                     int holeid = field_line_th( &g_holes, &pl->pos, &npos,
-                        2.5, (pl->hole > 0 ? pl->my_holeid : -1), NULL );
+                        4.0, (pl->hole > 0 ? pl->my_holeid : -1), NULL );
                     if (holeid < 256 && holeid != pl->cross_holeid)
                     {
                         if (pl->cross_holeid != 0)

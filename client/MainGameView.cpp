@@ -147,6 +147,8 @@ void MainGameView::draw()
 {
     GameView::draw();
 
+    fl_push_clip(x(), y(), w(), h());
+
     /* Draw chat lines */
     fl_font(FL_HELVETICA, 14);
     int x = this->x() + 8, y = this->y() + h() - 8;
@@ -181,4 +183,6 @@ void MainGameView::draw()
                 "Press movement keys to play.",
                     this->x(), this->y(), w(), h(), FL_ALIGN_CENTER );
     }
+
+    fl_pop_clip();
 }
