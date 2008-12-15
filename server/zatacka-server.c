@@ -548,9 +548,9 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 #ifdef REPLAY
                 if (fp_replay != NULL)
                 {
-                    /* Write to trace: time, player, turn, move*/
-                    fprintf( fp_replay, "%d %d %d %d\n",
-                             pl->timestamp, pl->index, a, (pl->hole ? 2 : v) );
+                    /* Write to replay: player, turn, move*/
+                    fprintf( fp_replay, "MOVE %d %d %d\n",
+                             pl->index, a, (pl->hole ? 2 : v) );
                 }
 #endif
 
@@ -650,6 +650,12 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
 
     msg[msg_len] = '\0'; /* hack */
     info("(CHAT) %s: %s", pl->name, msg);
+
+    /* Write to replay file */
+    if (fp_replay != NULL)
+    {
+        fprintf(fp_replay, "CHAT %s: %s\n", pl->name, msg);
+    }
 
     /* Build message packet */
     {
@@ -817,10 +823,13 @@ static void restart_game()
             }
             for (int n = 0; n < g_num_players; ++n)
             {
-                fprintf( fp_replay, "%d %d %d\n",
+                fprintf( fp_replay, "%d %d %d %d %d %d\n",
                          (int)g_players[n]->pos.x,
                          (int)g_players[n]->pos.y,
-                         (int)g_players[n]->pos.a );
+                         (int)g_players[n]->pos.a,
+                         (int)g_players[n]->color.r,
+                         (int)g_players[n]->color.g,
+                         (int)g_players[n]->color.b );
             }
         }
         else
