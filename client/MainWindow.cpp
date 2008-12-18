@@ -20,7 +20,14 @@ MainWindow::MainWindow( int width, int height,
     fps_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
     fps_box->align(FL_ALIGN_INSIDE);
     end();
-    if (fullscreen) this->fullscreen();
+    if (fullscreen)
+    {
+        this->fullscreen();
+    }
+    else
+    {
+        size_range(100, 100, 0, 0, 0, 0, 0);
+    }
 }
 
 MainWindow::~MainWindow()
@@ -34,6 +41,17 @@ int MainWindow::handle(int type)
         return gv->handleKeyPress(Fl::event_key());
     }
     return 0;
+}
+
+void MainWindow::resize(int x, int y, int w, int h)
+{
+    int gv_size = 3*w/4;
+    if (gv_size > h) gv_size = h;
+    gv->resize(5, 5, gv_size - 10, gv_size - 10);
+    sv->resize(gv_size, 0, w - gv_size, h - 40);
+    gid_box->resize(gv_size, h - 20, w - gv_size, 20);
+    fps_box->resize(gv_size, h - 40, w - gv_size, 20);
+    return Fl_Double_Window::resize(x, y, w, h);
 }
 
 void MainWindow::setGameId(unsigned gid)

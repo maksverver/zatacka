@@ -5,7 +5,8 @@
  - SERVER: option to block AI players
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
- - CLIENT: make game window resizable
+ - CLIENT: remove window resolution configuration options
+           (always start with 800x600?)
  - CLIENT: implement proper full screen mode on Windows (how?)
 
 General:

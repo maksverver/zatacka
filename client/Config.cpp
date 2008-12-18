@@ -181,7 +181,7 @@ bool Config::show_window()
     w_antialiasing = new Fl_Check_Button(110, 70, 170, 20, "&Anti-aliasing");
     w_antialiasing->value(m_antialiasing);
     w_fullscreen = new Fl_Check_Button(110, 90, 170, 20, "&Fullscreen");
-#ifdef WIN32
+#ifdef WIN32_XXX
     w_fullscreen->deactivate();
 #else
     w_fullscreen->value(m_fullscreen);

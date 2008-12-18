@@ -13,15 +13,19 @@ GameView::~GameView()
     if (offscr_created) fl_delete_offscreen(offscr);
 }
 
-void GameView::line(const Position *p, const Position *q, int n)
+void GameView::resize(int x, int y, int w, int h)
 {
-    Rect r;
-    field_line(&m_field, p, q, n + 1, &r);
+    if (offscr_created)
+    {
+        fl_delete_offscreen(offscr);
+        offscr_created = false;
+    }
+    return Fl_Widget::resize(x, y, w, h);
+}
 
+void GameView::renderOffscreen(int x1, int y1, int x2, int y2)
+{
     int w = this->w(), h = this->h();
-    int x1 = r.x1*w/FIELD_SIZE, x2 = (r.x2*w + FIELD_SIZE - 1)/FIELD_SIZE;
-    int y1 = r.y1*h/FIELD_SIZE, y2 = (r.y2*h + FIELD_SIZE - 1)/FIELD_SIZE;
-
     fl_begin_offscreen(offscr);
     if (antialiasing)
     {
@@ -55,15 +59,13 @@ void GameView::line(const Position *p, const Position *q, int n)
     else
     {
         /* Non anti-aliased display (may render faster) */
-        fl_color(sprites[n].col);
         for (int y = y1; y < y2; ++y)
         {
             for (int x = x1; x < x2; ++x)
             {
-                if (m_field[FIELD_SIZE*y/h][FIELD_SIZE*x/w] == n + 1)
-                {
-                    fl_point(x, h - 1 - y);
-                }
+                int n = m_field[FIELD_SIZE*y/h][FIELD_SIZE*x/w];
+                fl_color(n == 0 ? FL_BLACK : sprites[n - 1].col);
+                fl_point(x, h - 1 - y);
             }
         }
     }
@@ -71,6 +73,17 @@ void GameView::line(const Position *p, const Position *q, int n)
 
 //    damage(this->x() + x1, this->y() + h - y2, x2 - x1, y2 - y1, 1);
     damage(1);
+}
+
+void GameView::line(const Position *p, const Position *q, int n)
+{
+    Rect r;
+    field_line(&m_field, p, q, n + 1, &r);
+
+    int w = this->w(), h = this->h();
+    int x1 = r.x1*w/FIELD_SIZE, x2 = (r.x2*w + FIELD_SIZE - 1)/FIELD_SIZE;
+    int y1 = r.y1*h/FIELD_SIZE, y2 = (r.y2*h + FIELD_SIZE - 1)/FIELD_SIZE;
+    if (offscr_created) renderOffscreen(x1, y1, x2, y2);
 }
 
 void GameView::draw()
@@ -82,8 +95,7 @@ void GameView::draw()
         offscr = fl_create_offscreen(w(), h());
         offscr_created = true;
         fl_begin_offscreen(offscr);
-        fl_color(FL_BLACK);
-        fl_rectf(0, 0, w(), h());
+        renderOffscreen(0, 0, w(), h());
         fl_end_offscreen();
     }
 

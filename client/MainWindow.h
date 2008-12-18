@@ -11,6 +11,7 @@ public:
     MainWindow(int width, int height, bool fullscreen, bool antialiasing);
     ~MainWindow();
     int handle(int type);
+    void resize(int x, int y, int w, int h);
     MainGameView *gameView() { return gv; };
     ScoreView *scoreView() { return sv; };
     void setGameId(unsigned gid);

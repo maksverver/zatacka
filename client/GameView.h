@@ -25,6 +25,9 @@ public:
     GameView(int x, int y, int w, int h, bool antialiasing);
     ~GameView();
 
+    void resize(int x, int y, int w, int h);
+
+    void renderOffscreen(int x1, int y1, int x2, int y2);
     void line(const Position *p, const Position *q, int n);
 
     Fl_Color spriteColor(int n) { return sprites[n].col; };

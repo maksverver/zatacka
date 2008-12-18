@@ -767,7 +767,7 @@ int main(int argc, char *argv[])
 
     /* Create window */
     g_window = new MainWindow( cfg.width(), cfg.height(),
-                                cfg.fullscreen(), cfg.antialiasing() );
+                               cfg.fullscreen(), cfg.antialiasing() );
     g_window->show();
 
     /* Set-up local players */
