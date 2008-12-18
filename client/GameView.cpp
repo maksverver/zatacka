@@ -94,9 +94,7 @@ void GameView::draw()
     {
         offscr = fl_create_offscreen(w(), h());
         offscr_created = true;
-        fl_begin_offscreen(offscr);
         renderOffscreen(0, 0, w(), h());
-        fl_end_offscreen();
     }
 
     /* Draw background */
@@ -116,11 +114,12 @@ void GameView::draw()
             fl_push_matrix();
             fl_translate(x() + sprites[n].x, y() + sprites[n].y);
             fl_rotate(180/M_PI*sprites[n].a);
+            fl_scale(1e-3*this->w());
             fl_color(sprites[n].col);
             fl_begin_polygon();
-            fl_vertex( -9,  7);
-            fl_vertex(  9,  0);
-            fl_vertex( -9, -7);
+            fl_vertex( -14,  11);
+            fl_vertex(  14,   0);
+            fl_vertex( -14, -11);
             fl_end_polygon();
             fl_pop_matrix();
         }

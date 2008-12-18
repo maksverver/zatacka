@@ -106,7 +106,6 @@ void ScoreView::update(std::vector<Player> &players)
         new ScoreWidget(x, y, w, h, *ordered_players[n]);
         y += 50;
     }
-    resizable(new Fl_Box(x, y, w, h));
     end();
     redraw();
 }
