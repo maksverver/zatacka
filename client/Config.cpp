@@ -1,19 +1,6 @@
 #include "Config.h"
 #include <fstream>
 
-/* Possible window sizes */
-static const int res_count = 8;
-static const int res_default = 1;
-static const char * const res_str[res_count] = {
-    "640x480", "800x600", "1024x768", "1280x960",
-    "1280x1024", "1400x1050", "1600x1200", "1680x1050" };
-static const int res_width[res_count]  = {
-      640,  800, 1024, 1280,
-     1280, 1400, 1600, 1680 };
-static const int res_height[res_count] = {
-      480,  600,  768,  960,
-     1024, 1050, 1200, 1050 };
-
 /* Default key assignment */
 static const int default_keys[4][2] = {
     { 86, 88 },   /* Left, Right */
@@ -24,11 +11,8 @@ static const int default_keys[4][2] = {
 Config::Config()
 {
     /* Set some default values */
-    m_resolution = 1;
     m_fullscreen = false;
     m_antialiasing = true;
-    m_width  = res_width[m_resolution];
-    m_height = res_height[m_resolution];
 
     m_hostname = "localhost";
     m_port = 12321;
@@ -55,11 +39,10 @@ Config::~Config()
 bool Config::copy_settings()
 {
     /* Copy settings */
-    m_resolution    = w_resolution->value();
+
+    /* Display settings */
     m_fullscreen    = w_fullscreen->value();
     m_antialiasing  = w_antialiasing->value();
-    m_width         = res_width[m_resolution];
-    m_height        = res_height[m_resolution];
 
     /* Network config */
     m_hostname = w_hostname->value();
@@ -166,47 +149,37 @@ bool Config::show_window()
 {
     start = false;
 
-    win = new Fl_Window(300, 500);
+    win = new Fl_Window(300, 470);
     win->label("Configuration");
     win->set_modal();
 
-    Fl_Group *display = new Fl_Group(10, 30, 280, 90, "Display");
+    Fl_Group *display = new Fl_Group(10, 30, 280, 60, "Display");
     display->box(FL_DOWN_FRAME);
-    w_resolution = new Fl_Choice(110, 50, 170, 20, "&Window size: ");
-    for (int n = 0; n < res_count; ++n)
-    {
-        w_resolution->add(res_str[n], "", NULL);
-    }
-    w_resolution->value(m_resolution);
-    w_antialiasing = new Fl_Check_Button(110, 70, 170, 20, "&Anti-aliasing");
+    w_antialiasing = new Fl_Check_Button(110, 40, 170, 20, "&Anti-aliasing");
     w_antialiasing->value(m_antialiasing);
-    w_fullscreen = new Fl_Check_Button(110, 90, 170, 20, "&Fullscreen");
-#ifdef WIN32_XXX
-    w_fullscreen->deactivate();
-#else
+    w_fullscreen = new Fl_Check_Button(110, 60, 170, 20, "&Fullscreen");
     w_fullscreen->value(m_fullscreen);
-#endif
     display->end();
 
-    Fl_Group *network = new Fl_Group(10, 150, 280, 70, "Network");
+    Fl_Group *network = new Fl_Group(10, 120, 280, 70, "Network");
     network->box(FL_DOWN_FRAME);
-    w_hostname = new Fl_Input(110, 170, 160, 20, "&Host name: ");
+    w_hostname = new Fl_Input(110, 140, 160, 20, "&Hostname: ");
     w_hostname->value(m_hostname.c_str());
-    w_port = new Fl_Input(110, 190, 160, 20, "&Port number: ");
+    w_port = new Fl_Input(110, 160, 160, 20, "&Port: ");
     char port_buf[32];
     sprintf(port_buf, "%d", m_port);
     w_port->value(port_buf);
     network->end();
 
-    Fl_Group *players = new Fl_Group(10, 250, 280, 180, "Players");
+    Fl_Group *players = new Fl_Group(10, 220, 280, 180, "Players");
     players->box(FL_DOWN_FRAME);
     int i = 0;
     for (int n = 0; n < 4; ++n)
     {
-        w_players[n] = new Fl_Check_Button(20, 270 + n*40, 20, 20);
-        w_names[n] = new Fl_Input(40, 270+ n*40, 100, 20);
-        w_keys[n][0] = new Fl_Button(150, 270 + n*40, 60, 20, key_labels[m_keys[n][0]]);
-        w_keys[n][1] = new Fl_Button(220, 270 + n*40, 60, 20, key_labels[m_keys[n][1]]);
+        w_players[n] = new Fl_Check_Button(20, 240 + n*40, 20, 20);
+        w_names[n] = new Fl_Input(40, 240 + n*40, 100, 20);
+        w_keys[n][0] = new Fl_Button(150, 240 + n*40, 60, 20, key_labels[m_keys[n][0]]);
+        w_keys[n][1] = new Fl_Button(220, 240 + n*40, 60, 20, key_labels[m_keys[n][1]]);
         if (i < m_num_players && m_player_index[i] == n)
         {
             w_players[n]->value(1);
@@ -225,7 +198,7 @@ bool Config::show_window()
     }
     players->end();
 
-    Fl_Button *w_start = new Fl_Button(10, 450, 280, 30, "&Start");
+    Fl_Button *w_start = new Fl_Button(10, 420, 280, 30, "&Start");
     w_start->callback(start_cb, this);
     Fl::focus(w_start);
 
@@ -239,18 +212,6 @@ bool Config::show_window()
 
 bool Config::parse_setting(std::string &key, std::string &value, int i, int j)
 {
-    if (key == "resolution")
-    {
-        int v = atoi(value.c_str());
-        if (v >= 0 && v < res_count)
-        {
-            m_resolution = v;
-            m_width  = res_width[v];
-            m_height = res_width[v];
-            return true;
-        }
-    }
-
     if (key == "fullscreen")
     {
         m_fullscreen = (bool)atoi(value.c_str());
@@ -354,7 +315,6 @@ bool Config::load_settings(const char *path)
 bool Config::save_settings(const char *path)
 {
     std::ofstream ofs(path);
-    ofs << "resolution=" << m_resolution << '\n';
     ofs << "fullscreen=" << m_fullscreen << '\n';
     ofs << "antialiasing=" << m_antialiasing << '\n';
     ofs << "hostname=" << m_hostname << '\n';

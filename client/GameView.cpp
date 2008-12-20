@@ -15,7 +15,7 @@ GameView::~GameView()
 
 void GameView::resize(int x, int y, int w, int h)
 {
-    if (offscr_created)
+    if (offscr_created && (w != this->w() || h != this->h()))
     {
         fl_delete_offscreen(offscr);
         offscr_created = false;
@@ -27,6 +27,8 @@ void GameView::renderOffscreen(int x1, int y1, int x2, int y2)
 {
     int w = this->w(), h = this->h();
     fl_begin_offscreen(offscr);
+    fl_color(FL_BLACK);
+    fl_rectf(x1, h - y2, x2 - x1, y2 - y1);
     if (antialiasing)
     {
         for (int y = y1; y < y2; ++y)
@@ -51,8 +53,11 @@ void GameView::renderOffscreen(int x1, int y1, int x2, int y2)
                     }
                 }
 
-                fl_color(fl_rgb_color(r/9, g/9, b/9));
-                fl_point(x, h - 1 - y);
+                if (r + g + b > 0)
+                {
+                    fl_color(fl_rgb_color(r/9, g/9, b/9));
+                    fl_point(x, h - 1 - y);
+                }
             }
         }
     }
@@ -64,8 +69,11 @@ void GameView::renderOffscreen(int x1, int y1, int x2, int y2)
             for (int x = x1; x < x2; ++x)
             {
                 int n = m_field[FIELD_SIZE*y/h][FIELD_SIZE*x/w];
-                fl_color(n == 0 ? FL_BLACK : sprites[n - 1].col);
-                fl_point(x, h - 1 - y);
+                if (n > 0)
+                {
+                    fl_color(n == 0 ? FL_BLACK : sprites[n - 1].col);
+                    fl_point(x, h - 1 - y);
+                }
             }
         }
     }
@@ -141,10 +149,11 @@ void GameView::draw()
 
         if (!sprites[n].label.empty())
         {
-            fl_font(FL_HELVETICA, 12);
+            int font_size = w()/50 + 1;
+            fl_font(FL_HELVETICA, font_size);
             fl_color(FL_WHITE);
             fl_draw( sprites[n].label.c_str(),
-                     sprites[n].x, sprites[n].y + 12, 0, 12,
+                     sprites[n].x, sprites[n].y + 5*font_size/4, 0, font_size,
                      FL_ALIGN_CENTER, NULL, 0);
         }
     }
@@ -159,9 +168,11 @@ void GameView::damageSprite(int n)
     if (!sprites[n].label.empty())
     {
         int w = 0, h = 0;
-        fl_font(FL_HELVETICA, 12);
+        int font_size = this->w()/50 + 1;
+        fl_font(FL_HELVETICA, font_size);
         fl_measure(sprites[n].label.c_str(), w, h, 0);
-        damage(1, x() + sprites[n].x - w/2 - 4, y() + sprites[n].y + 6, w + 8, 24);
+        // damage(1, x() + sprites[n].x - w/2 - 4, y() + sprites[n].y + 6, w + 8, 24);
+        damage(1);
     }
 }
 

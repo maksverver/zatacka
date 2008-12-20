@@ -18,6 +18,19 @@ ScoreWidget::ScoreWidget(int x, int y, int w, int h, const Player &pl)
 {
 }
 
+static void draw_text( const char *text, int font_size,
+                       int x, int y, int w, int h, Fl_Align align )
+{
+    fl_font(FL_HELVETICA, font_size);
+    fl_color(fl_gray_ramp(FL_NUM_GRAY/2));
+    fl_draw(text, x - 1, y    , w, h, align, 0, 0);
+    fl_draw(text, x    , y - 1, w, h, align, 0, 0);
+    fl_draw(text, x + 1, y    , w, h, align, 0, 0);
+    fl_draw(text, x    , y + 1, w, h, align, 0, 0);
+    fl_color(FL_WHITE);
+    fl_draw(text, x, y, w, h, align, 0, 0);
+}
+
 void ScoreWidget::draw()
 {
     char buf[32];
@@ -27,30 +40,29 @@ void ScoreWidget::draw()
     fl_draw_box(FL_RSHADOW_BOX, x, y, w, h, (Fl_Color)pl.col);
 
     /* Draw player name */
-    fl_font(FL_HELVETICA, 20);
-    fl_color(FL_WHITE);
-    fl_draw( pl.name, x + 15, y + 2, w - 75, h - 2,
-             (Fl_Align)(FL_ALIGN_LEFT | FL_ALIGN_CLIP), 0, 0 );
+    draw_text( pl.name, 20, x + 15, y + 2, w - 75, h - 2,
+               (Fl_Align)(FL_ALIGN_LEFT | FL_ALIGN_CLIP) );
 
     /* Draw main score */
-    fl_font(FL_HELVETICA, 24);
-    fl_color(FL_WHITE);
     sprintf(buf, "%d", pl.score_avg);
-    fl_draw(buf, x + w - 30, y + 2, 20, h - 2, FL_ALIGN_RIGHT, 0, 0);
+    draw_text(buf, 24, x + w - 30, y + 2, 20, h - 2, FL_ALIGN_RIGHT);
 
     /* Draw total and current-round score */
-    fl_font(FL_HELVETICA, 12);
-    fl_color(FL_WHITE);
     sprintf(buf, "%d", pl.score_cur);
-    fl_draw(buf, x + w - 55, y + 5, 17, 20, FL_ALIGN_RIGHT, 0, 0);
+    draw_text(buf, 12, x + w - 55, y + 5, 17, 20, FL_ALIGN_RIGHT);
     sprintf(buf, "%d", pl.score_tot);
-    fl_draw(buf, x + w - 55, y + 17, 17, 20, FL_ALIGN_RIGHT, 0, 0);
+    draw_text(buf, 12, x + w - 55, y + 17, 17, 20, FL_ALIGN_RIGHT);
 
     /* Draw hole score */
+    fl_color(fl_gray_ramp(FL_NUM_GRAY/2));
+    for (int n = 0; n < pl.score_holes; ++n)
+    {
+        fl_pie(x + w - 60 - 10*n, y + 5 + 2*(n&1), 9, 9, 0, 360);
+    }
     fl_color(FL_BLACK);
     for (int n = 0; n < pl.score_holes; ++n)
     {
-        fl_pie(x + w - 60 - 10*n, y + 5, 9, 9, 0, 360);
+        fl_arc(x + w - 60 - 10*n, y + 5 + 2*(n&1), 9, 9, 0, 360);
     }
 }
 

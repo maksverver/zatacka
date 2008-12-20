@@ -766,7 +766,7 @@ int main(int argc, char *argv[])
     } while (!g_cs->connected());
 
     /* Create window */
-    g_window = new MainWindow( cfg.width(), cfg.height(),
+    g_window = new MainWindow( 800, 600,
                                cfg.fullscreen(), cfg.antialiasing() );
     g_window->show();
 

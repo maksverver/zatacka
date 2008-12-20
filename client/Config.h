@@ -15,8 +15,6 @@ public:
 
     bool fullscreen() const { return m_fullscreen; }
     bool antialiasing() const { return m_antialiasing; }
-    int width() const { return m_width; }
-    int height() const { return m_height; }
     const std::string &hostname() const { return m_hostname; }
     int port() const { return m_port; }
     int players() const { return m_num_players; }
@@ -36,10 +34,8 @@ private:
     bool start;
 
     /* Game window configuration */
-    int  m_resolution;
     bool m_fullscreen;
     bool m_antialiasing;
-    int  m_width, m_height;
 
     /* Network config */
     std::string m_hostname;
@@ -54,7 +50,6 @@ private:
     /* GUI */
     Fl_Window *win;
     Fl_Group *w_display;
-    Fl_Choice *w_resolution;
     Fl_Check_Button *w_fullscreen;
     Fl_Check_Button *w_antialiasing;
     Fl_Input *w_hostname;
