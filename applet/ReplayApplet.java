@@ -21,16 +21,7 @@ public class ReplayApplet extends Applet
         return ch >= '0' && ch <= '9';
     }
 
-    private String readString(BufferedReader br)
-    {
-        try {
-            return br.readLine();
-        } catch (IOException ioe) {
-            return null;
-        }
-    }
-
-    private int[] readInts(BufferedReader br)
+    private String readLine(BufferedReader br)
     {
         String line;
         try {
@@ -38,8 +29,16 @@ public class ReplayApplet extends Applet
         } catch (IOException ioe) {
             return null;
         }
-        if (line == null) return null;
+        return line;
+    }
 
+    private String readString(BufferedReader br)
+    {
+        return readLine(br);
+    }
+
+    private int[] parseInts(String line)
+    {
         ArrayList<Integer> ints = new ArrayList<Integer>();
         boolean minus = false;
         for (int n = 0; n < line.length(); ++n)
@@ -60,6 +59,12 @@ public class ReplayApplet extends Applet
         int[] res = new int[ints.size()];
         for (int n = 0; n < res.length; ++n) res[n] = ints.get(n);
         return res;
+    }
+
+    private int[] readInts(BufferedReader br)
+    {
+        String line = readLine(br);
+        return line == null ? null : parseInts(line);
     }
 
     private void print(int[] ints)
@@ -91,31 +96,34 @@ public class ReplayApplet extends Applet
         hole_cooldown = ints[7];
 
         String[] names = new String[num_players];
-        for (int n = 0; n < num_players; ++n)
-        {
-            names[n] = readString(br);
-        }
+        for (int n = 0; n < num_players; ++n) names[n] = readString(br);
 
         double[] xs = new double[num_players],
                  ys = new double[num_players],
                  as = new double[num_players];
+        Color[] colors = new Color[num_players];
         for (int n = 0; n < num_players; ++n)
         {
             ints = readInts(br);
             xs[n] = ints[0]/65536.0;
             ys[n] = ints[1]/65536.0;
             as[n] = ints[2]/32768.0*Math.PI;
+            colors[n] = new Color(ints[3], ints[4], ints[5]);
         }
 
         Graphics2D g = bi.createGraphics();
         AffineTransform xform = AffineTransform.getScaleInstance(1.0, -1.0);
         xform.translate(0.0, -1.0*FIELD_SIZE);
         g.transform(xform);
-        while ((ints = readInts(br)) != null)
+
+        String line;
+        while ((line = readLine(br)) != null)
         {
-            int i = ints[1];
-            int a = ints[2];
-            int v = ints[3];
+            if (!line.startsWith("MOVE ")) continue;
+            ints = parseInts(line.substring(5));
+            int i = ints[0];
+            int a = ints[1];
+            int v = ints[2];
             double na = as[i] + a*2*Math.PI/turn_rate;
             if (v > 0)
             {
@@ -135,7 +143,7 @@ public class ReplayApplet extends Applet
                     y[2] = (int)(FIELD_SIZE*(ny - 0.5*Math.cos(na)*th));
                     x[3] = (int)(FIELD_SIZE*(xs[i] + 0.5*Math.sin(as[i])*th));
                     y[3] = (int)(FIELD_SIZE*(ys[i] - 0.5*Math.cos(as[i])*th));
-                    g.setColor( i == 0 ? Color.YELLOW : Color.RED);
+                    g.setColor(colors[i]);
                     g.fillPolygon(x, y, 4);
                 }
                 xs[i] = nx;
