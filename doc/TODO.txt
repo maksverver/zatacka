@@ -1,10 +1,15 @@
 1.0:
  - name & branding
+ - SERVER: ensure Windows version of server works
 
 1.1:
  - SERVER: option to block AI players
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
+
+ - CLIENT+SERVER: support a TCP-only mode 
+    This will perform worse, but allows players to play from
+    badly configured networks.
 
 General:
  - clean up code, and make naming conventions (of classes, variables,
