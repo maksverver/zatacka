@@ -7,10 +7,6 @@
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
 
- - CLIENT+SERVER: support a TCP-only mode 
-    This will perform worse, but allows players to play from
-    badly configured networks.
-
 General:
  - clean up code, and make naming conventions (of classes, variables,
    methods, etc.) more consistent. (Also, introduce constants for magic

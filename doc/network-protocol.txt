@@ -14,6 +14,8 @@ Reliable packets: (client->server)
             1 byte: flags (0 = player, 1 = bot)
             1 byte: name length (L; 1 <= L <= 20)
             L bytes: name
+        1 byte: client connection flags
+            (0 = TCP+UDP, 1 = TCP-only)
    1 Quit
         no data
    2 Message

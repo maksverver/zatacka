@@ -54,7 +54,7 @@ static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliab
     return s;
 }
 
-ClientSocket::ClientSocket(const char *hostname, int port)
+ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
     : fd_stream(-1), fd_packet(-1), stream_pos(0)
 {
 #ifdef WIN32
@@ -105,23 +105,28 @@ ClientSocket::ClientSocket(const char *hostname, int port)
     if (fd_stream < 0)
     {
         error("TCP connection failed");
+        return;
     }
-    else
+
+    if (!reliable_only)
     {
         socklen_t len = sizeof(sa_local);
         if (getsockname(fd_stream, (sockaddr*)&sa_local, &len) != 0)
         {
             error("getsockname() failed");
+            return;
         }
 
         fd_packet = ip_connect(sa_local, sa_remote, false);
         if (fd_packet < 0)
         {
             error("UDP connection failed");
+            return;
         }
     }
 
-    if (fd_stream >= 0 && fd_packet >= 0) info("Connected! Local port: %d", ntohs(sa_local.sin_port));
+    info( "Connected! Local port: %d (%s)", ntohs(sa_local.sin_port),
+          reliable_only ? "TCP only" : "TCP+UDP" );
 }
 
 ClientSocket::~ClientSocket()
@@ -138,7 +143,7 @@ ClientSocket::~ClientSocket()
 
 bool ClientSocket::connected() const
 {
-    return fd_stream >= 0 && fd_packet >= 0;
+    return fd_stream >= 0;
 }
 
 void ClientSocket::write(void const *buf, size_t len, bool reliable)
@@ -149,7 +154,7 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
         return;
     }
 
-    if (reliable)
+    if (reliable || fd_packet < 0)
     {
         unsigned char packet[4096];
         packet[0] = len>>8;
@@ -216,8 +221,8 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
 
     fd_set readfds;
     FD_ZERO(&readfds);
-    FD_SET(fd_stream, &readfds);
-    FD_SET(fd_packet, &readfds);
+    if (fd_stream >= 0) FD_SET(fd_stream, &readfds);
+    if (fd_packet >= 0) FD_SET(fd_packet, &readfds);
 
     /* nfds must be set to the highest numbered socket + 1 */
     int nfds = 1 + (fd_stream > fd_packet ? fd_stream : fd_packet);
@@ -229,7 +234,7 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
     }
     if (ready == 0) return 0;
 
-    if (FD_ISSET(fd_stream, &readfds))
+    if (fd_stream >= 0 && FD_ISSET(fd_stream, &readfds))
     {
         ssize_t len = recv(fd_stream, stream_buf + stream_pos,
                                       sizeof(stream_buf) - stream_pos, 0);
@@ -239,7 +244,7 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
         if (res != 0) return res;
     }
 
-    if (FD_ISSET(fd_packet, &readfds))
+    if (fd_packet >= 0 && FD_ISSET(fd_packet, &readfds))
     {
         ssize_t res = recv(fd_packet, buf, buf_len, 0);
 

@@ -14,9 +14,10 @@ struct sockaddr_in;
 class ClientSocket
 {
 public:
-    ClientSocket(const char *host, int port);
+    ClientSocket(const char *host, int port, bool reliable_only = false);
     ~ClientSocket();
     bool connected() const;
+    bool reliable_only() const { return fd_packet < 0; }
 
     /* Streaming (reliable) messaging */
     void write(void const *buf, size_t len, bool reliable);

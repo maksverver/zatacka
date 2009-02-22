@@ -34,4 +34,14 @@ typedef enum Move
     MOVE_DEAD       = 4
 } Move;
 
+/* Player flags. Set in HELO message. */
+#define PLFL_NONE   (0)
+#define PLFL_BOT    (1)
+#define PLFL_ALL    (1)
+
+/* Client connection flags. Set in HELO message. */
+#define CLFL_NONE           (0)
+#define CLFL_RELIABLE_ONLY  (1)
+#define CLFL_ALL            (1)
+
 #endif /* ndef PROTOCOL_H_INCLUDED */

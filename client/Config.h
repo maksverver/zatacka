@@ -17,6 +17,7 @@ public:
     bool antialiasing() const { return m_antialiasing; }
     const std::string &hostname() const { return m_hostname; }
     int port() const { return m_port; }
+    bool reliable_only() const { return m_reliable_only; }
     int players() const { return m_num_players; }
     const std::string &name(int n) const { return m_names[m_player_index[n]]; }
     int key(int n, int m) const {
@@ -40,6 +41,7 @@ private:
     /* Network config */
     std::string m_hostname;
     int m_port;
+    bool m_reliable_only;
 
     /* Players */
     int m_num_players;
@@ -54,6 +56,7 @@ private:
     Fl_Check_Button *w_antialiasing;
     Fl_Input *w_hostname;
     Fl_Input *w_port;
+    Fl_Check_Button *w_reliable_only;
     Fl_Check_Button *w_players[4];
     Fl_Input *w_names[4];
     Fl_Button *w_keys[4][2];

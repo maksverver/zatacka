@@ -16,6 +16,7 @@ Config::Config()
 
     m_hostname = "localhost";
     m_port = 12321;
+    m_reliable_only = false;
 
     m_num_players = 1;
     m_player_index[0] = 0;
@@ -47,6 +48,7 @@ bool Config::copy_settings()
     /* Network config */
     m_hostname = w_hostname->value();
     m_port = atoi(w_port->value());
+    m_reliable_only = w_reliable_only->value();
 
     /* Players */
     m_num_players = 0;
@@ -149,7 +151,7 @@ bool Config::show_window()
 {
     start = false;
 
-    win = new Fl_Window(300, 470);
+    win = new Fl_Window(300, 490);
     win->label("Configuration");
     win->set_modal();
 
@@ -161,7 +163,7 @@ bool Config::show_window()
     w_fullscreen->value(m_fullscreen);
     display->end();
 
-    Fl_Group *network = new Fl_Group(10, 120, 280, 70, "Network");
+    Fl_Group *network = new Fl_Group(10, 120, 280, 90, "Network");
     network->box(FL_DOWN_FRAME);
     w_hostname = new Fl_Input(110, 140, 160, 20, "&Hostname: ");
     w_hostname->value(m_hostname.c_str());
@@ -169,17 +171,20 @@ bool Config::show_window()
     char port_buf[32];
     sprintf(port_buf, "%d", m_port);
     w_port->value(port_buf);
+    w_reliable_only = new Fl_Check_Button(110, 180, 160, 20,
+        "&Reliable conn. only");
+    w_reliable_only->value(m_reliable_only);
     network->end();
 
-    Fl_Group *players = new Fl_Group(10, 220, 280, 180, "Players");
+    Fl_Group *players = new Fl_Group(10, 240, 280, 180, "Players");
     players->box(FL_DOWN_FRAME);
     int i = 0;
     for (int n = 0; n < 4; ++n)
     {
-        w_players[n] = new Fl_Check_Button(20, 240 + n*40, 20, 20);
-        w_names[n] = new Fl_Input(40, 240 + n*40, 100, 20);
-        w_keys[n][0] = new Fl_Button(150, 240 + n*40, 60, 20, key_labels[m_keys[n][0]]);
-        w_keys[n][1] = new Fl_Button(220, 240 + n*40, 60, 20, key_labels[m_keys[n][1]]);
+        w_players[n] = new Fl_Check_Button(20, 260 + n*40, 20, 20);
+        w_names[n] = new Fl_Input(40, 260 + n*40, 100, 20);
+        w_keys[n][0] = new Fl_Button(150, 260 + n*40, 60, 20, key_labels[m_keys[n][0]]);
+        w_keys[n][1] = new Fl_Button(220, 260 + n*40, 60, 20, key_labels[m_keys[n][1]]);
         if (i < m_num_players && m_player_index[i] == n)
         {
             w_players[n]->value(1);
@@ -198,7 +203,7 @@ bool Config::show_window()
     }
     players->end();
 
-    Fl_Button *w_start = new Fl_Button(10, 420, 280, 30, "&Start");
+    Fl_Button *w_start = new Fl_Button(10, 440, 280, 30, "&Start");
     w_start->callback(start_cb, this);
     Fl::focus(w_start);
 
@@ -233,6 +238,12 @@ bool Config::parse_setting(std::string &key, std::string &value, int i, int j)
     if (key == "port")
     {
         m_port = atoi(value.c_str());
+        return true;
+    }
+
+    if (key == "tcp_only")
+    {
+        m_reliable_only = (bool)atoi(value.c_str());
         return true;
     }
 
@@ -319,6 +330,7 @@ bool Config::save_settings(const char *path)
     ofs << "antialiasing=" << m_antialiasing << '\n';
     ofs << "hostname=" << m_hostname << '\n';
     ofs << "port=" << m_port << '\n';
+    ofs << "tcp_only=" << m_reliable_only << '\n';
     for (int p = 0; p < 4; ++p)
     {
         ofs << "names:" << p << '=' << m_names[p] << '\n';

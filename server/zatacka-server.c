@@ -62,6 +62,7 @@ typedef int socklen_t;
 #endif /* ndef REPLAYDIR */
 #endif /* def REPLAY */
 
+
 typedef struct Player
 {
     /* Set to false if the player is in use. If true, name must be valid. */
@@ -105,6 +106,7 @@ typedef struct Client
     bool            in_use;
     bool            hailed;        /* have we received a HELO? */
     int             protocol;      /* protocol version used by the client */
+    int             flags;         /* connection flags */
 
     /* Remote address (TCP only) */
     struct sockaddr_in sa_remote;
@@ -117,6 +119,7 @@ typedef struct Client
     /* Players controlled by the client */
     Player          players[PLAYERS_PER_CLIENT];
 } Client;
+
 
 /*
     Global variables
@@ -232,7 +235,7 @@ static void client_broadcast(const void *buf, size_t len, bool reliable)
 static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
 {
     assert(len < (size_t)MAX_PACKET_LEN);
-    if (reliable)
+    if (reliable || (cl->flags & CLFL_RELIABLE_ONLY))
     {
         unsigned char header[2];
         header[0] = len>>8;
@@ -407,7 +410,7 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         }
 
         /* Get player flags */
-        pl->flags = buf[pos++];
+        pl->flags = buf[pos++]&PLFL_ALL;
 
         /* Get name length */
         size_t L = buf[pos++];
@@ -463,6 +466,11 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
 
         /* Enable player */
         pl->in_use = true;
+    }
+
+    if (pos < len)
+    {
+        cl->flags = buf[pos++]&CLFL_ALL;
     }
 }
 

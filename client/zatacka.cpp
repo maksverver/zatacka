@@ -632,8 +632,8 @@ void gui_fatal(const char *fmt, ...)
     vsnprintf(buf + pos, sizeof(buf) - pos, fmt, ap);
     va_end(ap);
 
-    info(buf);
-    fl_alert(buf);
+    error("%s", buf);
+    fl_alert("%s", buf);
     exit(1);
 }
 
@@ -756,7 +756,8 @@ int main(int argc, char *argv[])
         cfg.save_settings(config_path.c_str());
 
         /* Try to connect to the server */
-        g_cs = new ClientSocket(cfg.hostname().c_str(), cfg.port());
+        g_cs = new ClientSocket( cfg.hostname().c_str(), cfg.port(),
+                                 cfg.reliable_only() );
         if (!g_cs->connected())
         {
             fl_alert( "The network connection could not be established!\n"
@@ -797,12 +798,15 @@ int main(int argc, char *argv[])
         for (size_t n = 0; n < g_my_names.size(); ++n)
         {
             int flags = 0;
-            if (!g_my_controllers[n]->human()) flags |= 1;
+            if (!g_my_controllers[n]->human()) flags |= PLFL_BOT;
             packet[pos++] = flags;
             packet[pos++] = g_my_names[n].size();
             memcpy(packet + pos, g_my_names[n].data(), g_my_names[n].size());
             pos += g_my_names[n].size();
         }
+        int flags = 0;
+        if (g_cs->reliable_only()) flags |= CLFL_RELIABLE_ONLY;
+        packet[pos++] = flags;
         g_cs->write(packet, pos, true);
     }
 
