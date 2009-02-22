@@ -26,11 +26,15 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+typedef int SOCKET;
+const SOCKET INVALID_SOCKET = -1;
 #else
 #include <winsock2.h>
+#define send(s,b,l,f) send(s,(char*)b,l,f)
+#define recv(s,b,l,f) recv(s,(char*)b,l,f)
+#define close(s) closesocket(s)
+#define ioctl(s,c,a) ioctlsocket(s,c,a)
 typedef int socklen_t;
-#define close closesocket
-#define ioctl ioctlsocket
 #endif
 
 #ifndef M_PI
@@ -112,7 +116,7 @@ typedef struct Client
     struct sockaddr_in sa_remote;
 
     /* Streaming data */
-    int             fd_stream;
+    SOCKET          fd_stream;
     unsigned char   buf[MAX_PACKET_LEN + 2];
     int             buf_pos;
 
@@ -124,8 +128,8 @@ typedef struct Client
 /*
     Global variables
 */
-static int g_fd_listen;         /* Stream data listening socket */
-static int g_fd_packet;         /* Packet data socket */
+static SOCKET g_fd_listen;      /* Stream data listening socket */
+static SOCKET g_fd_packet;      /* Packet data socket */
 static int g_timestamp;         /* Time counter */
 static double g_time_start;     /* Time since at last game restart */
 static int g_deadline;          /* Game ends at this time */
@@ -196,14 +200,28 @@ int main(int argc, char *argv[]);
 
 /* Function definitions */
 
+#ifdef WIN32
+#define srandom(seed) srand(seed)
+
+static int random()
+{
+    /* On Windows, rand() returns a 15 bits number.
+       We combine the result from three calls to obtain a 31 number. */
+    assert(RAND_MAX == 32767);
+    return (rand() >> 14) | (rand() << 1) | (rand() << 16); 
+}
+#endif /* def WIN32 */
+
+/* NOTE: caller must ensure hi - lo + 1 does not overflow an int! */
 static int rand_int(int lo, int hi)
 {
+    const int random_max = 2147483647;
     assert(lo <= hi);
-    assert(hi - lo <= RAND_MAX);
-    int range = hi - lo + 1;  /* possible int overflow */
-    int lim = (RAND_MAX/range)*range;
+    assert(hi - lo <= random_max);
+    int range = hi - lo + 1;
+    int lim = (random_max/range)*range;
     int i;
-    do { i = rand(); } while (i >= lim);
+    do { i = random(); } while (i >= lim);
     return lo + i%range;
 }
 
@@ -492,7 +510,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     if (gameid != g_gameid)
     {
         info( "(MOVE) packet with invalid game id from client %d "
-              "(received %d; expected %d)", cl - g_clients, gameid, g_gameid);
+              "(received %08x; expected %08x)", cl - g_clients, gameid, g_gameid);
         return;
     }
 
@@ -1021,9 +1039,13 @@ static double process_frames()
     return 1.0;
 }
 
-static bool make_non_blocking(int fd)
+static bool make_non_blocking(SOCKET fd)
 {
-    unsigned v = 1;
+#ifdef WIN32
+    unsigned long v = 1;
+#else
+    int v = 1;
+#endif
     return ioctl(fd, FIONBIO, &v) == 0;
 }
 
@@ -1047,7 +1069,10 @@ static int run()
         {
             if (!g_clients[n].in_use) continue;
             FD_SET(g_clients[n].fd_stream, &readfds);
-            if (g_clients[n].fd_stream > max_fd) max_fd = g_clients[n].fd_stream;
+            if ((int)g_clients[n].fd_stream > max_fd)
+            {
+                max_fd = g_clients[n].fd_stream;
+            }
         }
 
         /* Select readable file descriptors (or wait until next tick) */
@@ -1064,8 +1089,8 @@ static int run()
         {
             struct sockaddr_in sa;
             socklen_t sa_len = sizeof(sa);
-            int fd = accept(g_fd_listen, (struct sockaddr*)&sa, &sa_len);
-            if (fd < 0)
+            SOCKET fd = accept(g_fd_listen, (struct sockaddr*)&sa, &sa_len);
+            if (fd == INVALID_SOCKET)
             {
                 error("accept() failed");
             }
@@ -1117,7 +1142,7 @@ static int run()
             unsigned char buf[MAX_PACKET_LEN];
             ssize_t buf_len;
 
-            buf_len = recvfrom( g_fd_packet, buf, sizeof(buf), 0,
+            buf_len = recvfrom( g_fd_packet, (void*)buf, sizeof(buf), 0,
                                 (struct sockaddr*)&sa, &sa_len );
             if (buf_len < 0)
             {
@@ -1207,7 +1232,7 @@ static int run()
 
 int main(int argc, char *argv[])
 {
-    srand(time(NULL));
+    srandom(time(NULL));
     time_reset();
 
     (void)argc;
@@ -1244,7 +1269,7 @@ int main(int argc, char *argv[])
 
     /* Create TCP listening socket */
     g_fd_listen = socket(PF_INET, SOCK_STREAM, 0);
-    if (g_fd_listen < 0)
+    if (g_fd_listen == INVALID_SOCKET)
     {
         fatal("could not create TCP socket: socket() failed");
     }
@@ -1259,7 +1284,7 @@ int main(int argc, char *argv[])
 
     /* Create UDP datagram socket */
     g_fd_packet = socket(PF_INET, SOCK_DGRAM, 0);
-    if (g_fd_packet < 0)
+    if (g_fd_packet == INVALID_SOCKET)
     {
         fatal("could not create UDP socket: socket() failed");
     }

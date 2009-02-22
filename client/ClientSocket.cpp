@@ -30,8 +30,8 @@ static double g_packetloss;
 
 static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliable)
 {
-    int s = socket(PF_INET, reliable ? SOCK_STREAM : SOCK_DGRAM, 0);
-    if (s < 0)
+    SOCKET s = socket(PF_INET, reliable ? SOCK_STREAM : SOCK_DGRAM, 0);
+    if (s == INVALID_SOCKET)
     {
         error("ip_connect(): socket() failed");
         return -1;
@@ -55,7 +55,7 @@ static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliab
 }
 
 ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
-    : fd_stream(-1), fd_packet(-1), stream_pos(0)
+    : fd_stream(INVALID_SOCKET), fd_packet(INVALID_SOCKET), stream_pos(0)
 {
 #ifdef WIN32
     static bool winsock_initialized = false;
@@ -102,7 +102,7 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
     sa_local.sin_addr.s_addr = INADDR_ANY;
 
     fd_stream = ip_connect(sa_local, sa_remote, true);
-    if (fd_stream < 0)
+    if (fd_stream == INVALID_SOCKET)
     {
         error("TCP connection failed");
         return;
@@ -118,7 +118,7 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
         }
 
         fd_packet = ip_connect(sa_local, sa_remote, false);
-        if (fd_packet < 0)
+        if (fd_packet == INVALID_SOCKET)
         {
             error("UDP connection failed");
             return;
@@ -131,11 +131,11 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
 
 ClientSocket::~ClientSocket()
 {
-    if (fd_stream >= 0)
+    if (fd_stream != INVALID_SOCKET)
     {
         close(fd_stream);
     }
-    if (fd_packet >= 0)
+    if (fd_packet != INVALID_SOCKET)
     {
         close(fd_packet);
     }
@@ -143,7 +143,7 @@ ClientSocket::~ClientSocket()
 
 bool ClientSocket::connected() const
 {
-    return fd_stream >= 0;
+    return fd_stream != INVALID_SOCKET;
 }
 
 void ClientSocket::write(void const *buf, size_t len, bool reliable)
@@ -154,7 +154,7 @@ void ClientSocket::write(void const *buf, size_t len, bool reliable)
         return;
     }
 
-    if (reliable || fd_packet < 0)
+    if (reliable || fd_packet == INVALID_SOCKET)
     {
         unsigned char packet[4096];
         packet[0] = len>>8;
@@ -221,11 +221,17 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
 
     fd_set readfds;
     FD_ZERO(&readfds);
-    if (fd_stream >= 0) FD_SET(fd_stream, &readfds);
-    if (fd_packet >= 0) FD_SET(fd_packet, &readfds);
-
-    /* nfds must be set to the highest numbered socket + 1 */
-    int nfds = 1 + (fd_stream > fd_packet ? fd_stream : fd_packet);
+    int nfds = 0;  /* must be set to the highest numbered socket + 1 */
+    if (fd_stream != INVALID_SOCKET)
+    {
+        FD_SET(fd_stream, &readfds);
+        if ((int)fd_stream >= nfds) nfds = fd_stream + 1;
+    }
+    if (fd_packet != INVALID_SOCKET)
+    {
+        FD_SET(fd_packet, &readfds);
+        if ((int)fd_packet >= nfds) nfds = fd_packet + 1;
+    }
     int ready = select(nfds, &readfds, NULL, NULL, &tv);
     if (ready < 0)
     {
@@ -234,7 +240,7 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
     }
     if (ready == 0) return 0;
 
-    if (fd_stream >= 0 && FD_ISSET(fd_stream, &readfds))
+    if (fd_stream != INVALID_SOCKET && FD_ISSET(fd_stream, &readfds))
     {
         ssize_t len = recv(fd_stream, stream_buf + stream_pos,
                                       sizeof(stream_buf) - stream_pos, 0);
@@ -244,7 +250,7 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
         if (res != 0) return res;
     }
 
-    if (fd_packet >= 0 && FD_ISSET(fd_packet, &readfds))
+    if (fd_packet != INVALID_SOCKET && FD_ISSET(fd_packet, &readfds))
     {
         ssize_t res = recv(fd_packet, buf, buf_len, 0);
 

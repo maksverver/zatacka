@@ -1,6 +1,5 @@
 1.0:
  - name & branding
- - SERVER: ensure Windows version of server works
 
 1.1:
  - SERVER: option to block AI players

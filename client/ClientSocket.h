@@ -9,15 +9,22 @@ typedef int ssize_t;
 #include <unistd.h>
 #endif
 
-struct sockaddr_in;
+#ifdef WIN32
+#include <winsock2.h>
+#else
+typedef int SOCKET;
+const SOCKET INVALID_SOCKET = -1;
+#endif
 
+struct sockaddr_in;
+ 
 class ClientSocket
 {
 public:
     ClientSocket(const char *host, int port, bool reliable_only = false);
     ~ClientSocket();
     bool connected() const;
-    bool reliable_only() const { return fd_packet < 0; }
+    bool reliable_only() const { return fd_packet == INVALID_SOCKET; }
 
     /* Streaming (reliable) messaging */
     void write(void const *buf, size_t len, bool reliable);
@@ -28,8 +35,8 @@ protected:
     ssize_t next_stream_packet(void *buf, size_t buf_len);
 
 private:
-    int fd_stream;
-    int fd_packet;
+    SOCKET fd_stream;
+    SOCKET fd_packet;
 
     unsigned char stream_buf[4096];
     size_t stream_pos;
