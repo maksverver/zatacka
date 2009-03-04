@@ -26,6 +26,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <netinet/tcp.h>
 typedef int SOCKET;
 const SOCKET INVALID_SOCKET = -1;
 #else
@@ -143,6 +144,10 @@ static Player *g_players[MAX_PLAYERS];
 static unsigned char g_field[FIELD_SIZE][FIELD_SIZE];
 static unsigned char g_holes[FIELD_SIZE][FIELD_SIZE];
 
+static char packet_data_[MAX_PACKET_LEN + 2];     /* packet data buffer */
+static char *packet_buf = packet_data_ + 2;       /* packet payload */
+static size_t packet_len;                         /* size of packet payload */
+
 #ifdef REPLAY
 static FILE *fp_replay;         /* Record replay to this file */
 #endif
@@ -163,11 +168,26 @@ static bool rgb_black(const struct RGB *c);
 /* Disconnect a client (sending the given reason, if possible) */
 static void client_disconnect(Client *cl, const char *reason);
 
-/* Send a message to all connected clients */
-static void client_broadcast(const void *buf, size_t len, bool reliable);
+/* Start a new packet with the given type */
+static void packet_begin(int type);
 
-/* Send a message to a client */
-static void client_send(Client *cl, const void *buf, size_t len, bool reliable);
+/* Add a byte to the packet */
+static size_t packet_write_byte(int value);
+
+/* Add data to the packet */
+static size_t packet_write(const char *buf, size_t len);
+
+/* Add formatted data to the packet */
+static int packet_vprintf(const char *fmt, va_list ap);
+
+/* Finish the packet */
+static void packet_end();
+
+/* Send a packet to a client */
+static void packet_send(Client *cl, bool reliable);
+
+/* Broadcast a packet to all connected clients */
+static void packet_broadcast(bool reliable);
 
 /* Kill a player */
 static void player_kill(Player *p);
@@ -238,28 +258,72 @@ static bool rgb_black(const struct RGB *c)
     return c->r + c->g + c->b == 0;
 }
 
+static void packet_begin(int type)
+{
+    packet_len = 0;
+    packet_buf[packet_len++] = type;
+}
 
-static void client_broadcast(const void *buf, size_t len, bool reliable)
+static size_t packet_write_byte(int value)
+{
+    if (packet_len < MAX_PACKET_LEN)
+    {
+        packet_buf[packet_len++] = value;
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+static size_t packet_write(const char *buf, size_t len)
+{
+    size_t bytes_left = MAX_PACKET_LEN - packet_len;
+    if (bytes_left < len) len = bytes_left;
+    memcpy(packet_buf + packet_len, buf, len);
+    packet_len += len;
+    return len;
+}
+
+static int packet_vprintf(const char *fmt, va_list ap)
+{
+    int bytes_left = MAX_PACKET_LEN - packet_len;
+    int written = vsnprintf(packet_buf + packet_len, bytes_left, fmt, ap);
+    if (written < 0) return 0;
+    if (written > bytes_left) written = bytes_left;
+    packet_len += written;
+    return written;
+}
+
+static void packet_end()
+{
+    /* Add 16-bit packet length in front (in network order) */
+    packet_buf[-2] = (packet_len >> 8)&0xff;
+    packet_buf[-1] = (packet_len >> 0)&0xff;
+}
+
+static void packet_broadcast(bool reliable)
 {
     for (int n = 0; n < MAX_CLIENTS; ++n)
     {
         Client *cl = &g_clients[n];
         if (!cl->in_use) continue;
         if (!reliable && !cl->hailed) continue;
-        client_send(cl, buf, len, reliable);
+        packet_send(cl, reliable);
     }
 }
 
-static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
+static void packet_send(Client *cl, bool reliable)
 {
-    assert(len < (size_t)MAX_PACKET_LEN);
+    /* Verify that packet_end() has been called: */
+    assert(packet_buf[-1] || packet_buf[-2]);
+
     if (reliable || (cl->flags & CLFL_RELIABLE_ONLY))
     {
-        unsigned char header[2];
-        header[0] = len>>8;
-        header[1] = len&255;
-        if ( send(cl->fd_stream, header, 2, 0) != 2 ||
-             send(cl->fd_stream, buf, len, 0) != (ssize_t)len )
+        char *buf = packet_buf - 2;
+        ssize_t len = packet_len + 2;
+        if (send(cl->fd_stream, buf, len, 0) != (ssize_t)len)
         {
             info("reliable send() failed");
 
@@ -269,9 +333,9 @@ static void client_send(Client *cl, const void *buf, size_t len, bool reliable)
     }
     else
     {
-        if (sendto( g_fd_packet, buf, len, 0,
+        if (sendto( g_fd_packet, packet_buf, packet_len, 0,
                     (struct sockaddr*)&cl->sa_remote,
-                    sizeof(cl->sa_remote) ) != (ssize_t)len)
+                    sizeof(cl->sa_remote) ) != (ssize_t)packet_len)
         {
             info("unreliable send() failed");
         }
@@ -302,12 +366,10 @@ static void client_disconnect(Client *cl, const char *reason)
     /* Send quit packet containing reason to client */
     if (reason != NULL)
     {
-        unsigned char packet[MAX_PACKET_LEN];
-        size_t len = strlen(reason);
-        if (len > MAX_PACKET_LEN - 1) len = MAX_PACKET_LEN - 1;
-        packet[0] = MRSC_DISC;
-        memcpy(packet + 1, reason, len);
-        client_send(cl, packet, len + 1, true);
+        packet_begin(MRSC_DISC);
+        packet_write(reason, strlen(reason));
+        packet_end();
+        packet_send(cl, true);
     }
     close(cl->fd_stream);
 }
@@ -317,11 +379,11 @@ static void message(const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
 
-    unsigned char packet[MAX_PACKET_LEN];
-    packet[0] = MRSC_MESG;
-    packet[1] = 0;
-    vsnprintf((char*)packet + 2, sizeof(packet) - 2, fmt, ap);
-    client_broadcast(packet, 2 + strlen((char*)packet + 2), true);
+    packet_begin(MRSC_MESG);
+    packet_write_byte(0);
+    packet_vprintf(fmt, ap);
+    packet_end();
+    packet_broadcast(true);
 
     va_end(ap);
 }
@@ -685,17 +747,16 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
 
     /* Build message packet */
     {
-        unsigned char packet[MAX_PACKET_LEN];
-        size_t pos = 0, name_len = strlen(pl->name);
-        packet[pos++] = MRSC_MESG;
-        packet[pos++] = name_len;
-        memcpy(&packet[pos], pl->name, name_len);
-        pos += name_len;
+        packet_begin(MRSC_MESG);
+        size_t name_len = strlen(pl->name);
+        packet_write_byte(name_len);
+        packet_write(pl->name, name_len);
         for (size_t n = 0; n < msg_len; ++n)
         {
-            packet[pos++] = (msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ';
+            packet_write_byte((msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ');
         }
-        client_broadcast(packet, pos, true);
+        packet_end();
+        packet_broadcast(true);
     }
     return;
 
@@ -866,48 +927,44 @@ static void restart_game()
 #endif
 
     /* Build start game packet */
-    unsigned char packet[MAX_PACKET_LEN];
-    size_t pos = 0;
-    packet[pos++] = MRSC_STRT;
-    packet[pos++] = SERVER_FPS;
-    packet[pos++] = TURN_RATE;
-    packet[pos++] = MOVE_RATE;
-    packet[pos++] = WARMUP;
-    packet[pos++] = SCORE_HISTORY;
-    packet[pos++] = (HOLE_PROBABILITY >> 8)&255;
-    packet[pos++] = (HOLE_PROBABILITY >> 0)&255;
-    packet[pos++] = HOLE_LENGTH_MIN;
-    packet[pos++] = HOLE_LENGTH_MAX - HOLE_LENGTH_MIN;
-    packet[pos++] = HOLE_COOLDOWN;
-    packet[pos++] = MOVE_BACKLOG;
-    packet[pos++] = g_num_players;
-    packet[pos++] = (g_gameid>>24)&255;
-    packet[pos++] = (g_gameid>>16)&255;
-    packet[pos++] = (g_gameid>> 8)&255;
-    packet[pos++] = (g_gameid>> 0)&255;
-    assert(pos == 17);
+    packet_begin(MRSC_STRT);
+    packet_write_byte(SERVER_FPS);
+    packet_write_byte(TURN_RATE);
+    packet_write_byte(MOVE_RATE);
+    packet_write_byte(WARMUP);
+    packet_write_byte(SCORE_HISTORY);
+    packet_write_byte((HOLE_PROBABILITY >> 8)&255);
+    packet_write_byte((HOLE_PROBABILITY >> 0)&255);
+    packet_write_byte(HOLE_LENGTH_MIN);
+    packet_write_byte(HOLE_LENGTH_MAX - HOLE_LENGTH_MIN);
+    packet_write_byte(HOLE_COOLDOWN);
+    packet_write_byte(MOVE_BACKLOG);
+    packet_write_byte(g_num_players);
+    packet_write_byte((g_gameid>>24)&255);
+    packet_write_byte((g_gameid>>16)&255);
+    packet_write_byte((g_gameid>> 8)&255);
+    packet_write_byte((g_gameid>> 0)&255);
+
     for (int i = 0; i < g_num_players; ++i)
     {
         Player *pl = g_players[i];
-        assert(pos + 10 < MAX_PACKET_LEN);
-        packet[pos++] = pl->color.r;
-        packet[pos++] = pl->color.g;
-        packet[pos++] = pl->color.b;
+        packet_write_byte(pl->color.r);
+        packet_write_byte(pl->color.g);
+        packet_write_byte(pl->color.b);
         int x = (int)pl->pos.x;
         int y = (int)pl->pos.y;
         int a = (int)pl->pos.a;
-        packet[pos++] = (x>>8)&255;
-        packet[pos++] = (x>>0)&255;
-        packet[pos++] = (y>>8)&255;
-        packet[pos++] = (y>>0)&255;
-        packet[pos++] = (a>>8)&255;
-        packet[pos++] = (a>>0)&255;
+        packet_write_byte((x>>8)&255);
+        packet_write_byte((x>>0)&255);
+        packet_write_byte((y>>8)&255);
+        packet_write_byte((y>>0)&255);
+        packet_write_byte((a>>8)&255);
+        packet_write_byte((a>>0)&255);
         size_t name_len = strlen(pl->name);
-        packet[pos++] = name_len;
-        assert(pos + name_len < MAX_PACKET_LEN);
-        memcpy(&packet[pos], pl->name, name_len);
-        pos += name_len;
+        packet_write_byte(name_len);
+        packet_write(pl->name, name_len);
     }
+    packet_end();
 
     /* Convert positions to more practical format */
     for (int i = 0; i < g_num_players; ++i)
@@ -919,17 +976,13 @@ static void restart_game()
     }
 
     /* Send start packet to all clients */
-    client_broadcast(packet, pos, true);
+    packet_broadcast(true);
     send_scores();
 }
 
 static void send_scores()
 {
-    unsigned char packet[MAX_PACKET_LEN];
-    size_t pos = 0;
-
-    packet[pos++] = MRSC_SCOR;
-
+    packet_begin(MRSC_SCOR);
     for (int n = 0; n < g_num_players; ++n)
     {
         int tot, cur, avg;
@@ -938,17 +991,17 @@ static void send_scores()
         cur = g_players[n]->score_history[0];
         avg = g_players[n]->score_moving_sum;
 
-        packet[pos++] = tot >> 8;
-        packet[pos++] = tot & 255;
-        packet[pos++] = cur >> 8;
-        packet[pos++] = cur & 255;
-        packet[pos++] = avg >> 8;
-        packet[pos++] = avg & 255;
-        packet[pos++] = g_players[n]->score_holes;
-        packet[pos++] = 0;
+        packet_write_byte(tot >> 8);
+        packet_write_byte(tot & 255);
+        packet_write_byte(cur >> 8);
+        packet_write_byte(cur & 255);
+        packet_write_byte(avg >> 8);
+        packet_write_byte(avg & 255);
+        packet_write_byte(g_players[n]->score_holes);
+        packet_write_byte(0);
     }
-
-    client_broadcast(packet, pos, true);
+    packet_end();
+    packet_broadcast(true);
 }
 
 static void do_frame()
@@ -979,47 +1032,33 @@ static void do_frame()
     }
 
     /* Send moves packet to all clients  */
-    unsigned char packet[4096];
-    size_t pos = 0;
-    packet[pos++] = MUSC_MOVE;
-    packet[pos++] = (g_gameid >> 24)&255;
-    packet[pos++] = (g_gameid >> 16)&255;
-    packet[pos++] = (g_gameid >>  8)&255;
-    packet[pos++] = (g_gameid >>  0)&255;
-    packet[pos++] = (g_timestamp >> 24)&255;
-    packet[pos++] = (g_timestamp >> 16)&255;
-    packet[pos++] = (g_timestamp >>  8)&255;
-    packet[pos++] = (g_timestamp >>  0)&255;
-    assert(pos + g_num_players < MAX_PACKET_LEN);
+    packet_begin(MUSC_MOVE);
+    packet_write_byte((g_gameid >> 24)&255);
+    packet_write_byte((g_gameid >> 16)&255);
+    packet_write_byte((g_gameid >>  8)&255);
+    packet_write_byte((g_gameid >>  0)&255);
+    packet_write_byte((g_timestamp >> 24)&255);
+    packet_write_byte((g_timestamp >> 16)&255);
+    packet_write_byte((g_timestamp >>  8)&255);
+    packet_write_byte((g_timestamp >>  0)&255);
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != -1 &&
-            g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG)
-        {
-            packet[pos++] = 0;
-        }
-        else
-        {
-            packet[pos++] = 1;
-        }
+        bool dead = g_players[n]->dead_since != -1 &&
+                    g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG;
+        packet_write_byte(!dead);
     }
     for (int n = 0; n < g_num_players; ++n)
     {
-        if (g_players[n]->dead_since != -1 &&
-            g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG)
-        {
-            continue;
-        }
-        assert(pos + MOVE_BACKLOG < MAX_PACKET_LEN);
+        bool dead = g_players[n]->dead_since != -1 &&
+                    g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG;
+        if (dead) continue;
         int backlog = g_timestamp - g_players[n]->timestamp;
         if (backlog > MOVE_BACKLOG) backlog = MOVE_BACKLOG;
-        memcpy(packet + pos, g_players[n]->moves + backlog,
-                             MOVE_BACKLOG - backlog);
-        memset(packet + pos + MOVE_BACKLOG - backlog, 0, backlog);
-        pos += MOVE_BACKLOG;
+        packet_write(g_players[n]->moves + backlog, MOVE_BACKLOG - backlog);
+        while (backlog-- > 0) packet_write_byte(0);
     }
-
-    client_broadcast(packet, pos, false);
+    packet_end();
+    packet_broadcast(false);
 }
 
 /* Processes frames until the server is up to date, and returns the
@@ -1037,15 +1076,29 @@ static double process_frames()
     return 1.0;
 }
 
-static bool make_non_blocking(SOCKET fd)
+static bool socket_set_blocking(SOCKET fd, bool val)
 {
+    /* Note that we set FIONBIO (NON-blocking IO!) iff val is false! */
 #ifdef WIN32
-    unsigned long v = 1;
+    unsigned long v = !val;
 #else
-    int v = 1;
+    int v = !val;
 #endif
     return ioctl(fd, FIONBIO, &v) == 0;
 }
+
+#if 0
+static bool socket_set_delayed(SOCKET fd, bool val)
+{
+    /* Note that we set the NODELAY option iff val is false! */
+#ifdef WIN32
+    BOOL v = !val;
+#else
+    int v = !val;
+#endif
+    return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v)) == 0;
+}
+#endif
 
 static int run()
 {
@@ -1099,13 +1152,20 @@ static int run()
                 close(fd);
             }
             else
-            if (!make_non_blocking(fd))
+            if (!socket_set_blocking(fd, 0))
             {
                 error("could not put TCP socket non-blocking mode");
                 close(fd);
             }
             else
             {
+#if 0
+                if (!socket_set_delayed(fd, 0))
+                {
+                    warn("could not put TCP socket in undelayed mode");
+                }
+#endif
+
                 int n = 0;
                 while (n < MAX_CLIENTS && g_clients[n].in_use) ++n;
                 if (n == MAX_CLIENTS)
@@ -1290,7 +1350,7 @@ int main(int argc, char *argv[])
     {
         fatal("could not create UDP socket: bind() failed");
     }
-    if (!make_non_blocking(g_fd_packet))
+    if (!socket_set_blocking(g_fd_packet, 0))
     {
         fatal("could not put UDP socket in non-blocking mode");
     }
