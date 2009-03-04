@@ -490,7 +490,7 @@ static void handle_MOVE(unsigned char *buf, size_t len)
         g_window->gameView()->setWarmup(false);
     }
 
-    /* Update estimated server time (at start of the round) */
+    /* Update estimated server time */
     {
         double t = time_now() - 1.0*timestamp/g_gp.data_rate;
         if (g_last_timestamp == -1 || t < g_server_time) g_server_time = t;
@@ -569,11 +569,12 @@ void callback(void *arg)
     if (len < 0) error("ClientSocket::read() failed!");
 
     /* Do timed events */
-    double t = time_now();
-    g_window->gameView()->updateTime(t);
+    g_window->gameView()->updateTime(time_now());
+
     if (g_last_timestamp >= 0)
     {
         /* Estimate server timestamp */
+        double t = time_now();
         int server_timestamp = (int)floor((t - g_server_time)*g_gp.data_rate);
         forward_to(server_timestamp + 1);
         update_sprites();
@@ -581,7 +582,7 @@ void callback(void *arg)
 
     /* Calculate FPS */
     g_frame_counter += 1;
-    t = time_now();
+    double t = time_now();
     if (t > g_frame_time + 1)
     {
         if (g_frame_time > 0)
