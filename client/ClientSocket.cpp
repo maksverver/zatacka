@@ -15,6 +15,7 @@ typedef int ssize_t;
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <netinet/tcp.h>
 #else
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -70,7 +71,6 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
     }
 #endif
 
-
     info("Resolving host \"%s\"...", hostname);
     hostent *he = gethostbyname(hostname);
     if (!he)
@@ -107,6 +107,20 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
         error("TCP connection failed");
         return;
     }
+
+/*
+    {
+#ifdef WIN32
+        BOOL v = TRUE;
+#else
+        int v = 1;
+#endif
+        if (setsockopt(fd_stream, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v)) != 0)
+        {
+            warn("could not put TCP socket in undelayed mode");
+        }
+    }
+*/
 
     if (!reliable_only)
     {
@@ -244,7 +258,11 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
     {
         ssize_t len = recv(fd_stream, stream_buf + stream_pos,
                                       sizeof(stream_buf) - stream_pos, 0);
-        if (len < 0) return len; /* read failed */
+        if (len < 0)
+        {
+            error("recv() failed  %d", stream_pos);
+            return -1;
+        }
         stream_pos += len;
         ssize_t res = next_stream_packet(buf, buf_len);
         if (res != 0) return res;
