@@ -438,6 +438,7 @@ static void forward_to(int timestamp)
     }
 
     /* Send new move packet */
+    if (!g_my_moves.empty())
     {
         char packet[4096];
         size_t pos = 0;
@@ -470,8 +471,8 @@ static void handle_MOVE(unsigned char *buf, size_t len)
     unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
     if (gameid != g_gp.gameid)
     {
-        warn("(MOVE) packet with invalid game id (received %d; expected %d)",
-            gameid, g_gp.gameid);
+        warn( "(MOVE) packet with invalid game id "
+              "(received %08x; expected %08x)", gameid, g_gp.gameid );
         return;
     }
 
@@ -565,7 +566,7 @@ void callback(void *arg)
     {
         handle_packet(buf, (size_t)len);
     }
-    if (len < 0) error("socket read failed");
+    if (len < 0) error("ClientSocket::read() failed!");
 
     /* Do timed events */
     double t = time_now();
