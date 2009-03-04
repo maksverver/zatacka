@@ -921,9 +921,6 @@ static void restart_game()
     /* Send start packet to all clients */
     client_broadcast(packet, pos, true);
     send_scores();
-
-    /* Reset timer (important!) */
-    time_reset();
 }
 
 static void send_scores()
@@ -1031,7 +1028,8 @@ static double process_frames()
 {
     do {
         /* Compute time to next tick */
-        double delay = (double)(g_timestamp + 1)/SERVER_FPS - time_now();
+        double delay = g_time_start + (double)(g_timestamp + 1)/SERVER_FPS -
+		       time_now();
         if (delay > 0) return delay;
         g_timestamp += 1;
         do_frame();
