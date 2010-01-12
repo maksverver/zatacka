@@ -1,6 +1,6 @@
 include ../base.mk
 
-FLTKC=../fltk/bin/fltk-config
+FLTKC=fltk-config
 CXXFLAGS+=`$(FLTKC) --cxxflags` -I..
 LDFLAGS+=`$(FLTKC) --ldstaticflags`
 LDLIBS+=../common/common.a
