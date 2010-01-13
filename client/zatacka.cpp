@@ -1,4 +1,5 @@
 #include "common.h"
+#include "Audio.h"
 #include "ClientSocket.h"
 #include "Config.h"
 #include "GameModel.h"
@@ -49,6 +50,10 @@ int g_frame_counter;     /* frames counted since last reset */
 
 #ifdef DEBUG
 FILE *fp_trace;
+#endif
+
+#ifdef WITH_AUDIO
+Audio *g_audio;
 #endif
 
 static void player_reset_prediction(int n)
@@ -280,6 +285,9 @@ static void handle_SCOR(unsigned char *buf, size_t len)
         g_players[n].score_avg = 256*buf[pos + 4] + buf[pos + 5];
         if (g_players[n].score_holes != buf[pos + 6])
         {
+#ifdef WITH_AUDIO
+            if (g_audio) g_audio->play_sample(5 + rand()%3);
+#endif /* def WITH_AUDIO */
             g_players[n].score_holes = buf[pos + 6];
         }
         pos += 8;
@@ -357,6 +365,9 @@ static void player_move(int n, Move move)
         {
             pl.dead = true;
             g_window->gameView()->setSpriteType(n, Sprite::HIDDEN);
+#ifdef WITH_AUDIO
+            if (g_audio) g_audio->play_sample(1 + rand()%2);
+#endif /* def WITH_AUDIO */
         }
         break;
     }
@@ -593,6 +604,10 @@ void callback(void *arg)
         g_frame_counter = 0;
     }
 
+#ifdef WITH_AUDIO
+    if (g_audio) g_audio->update();
+#endif
+
     Fl::repeat_timeout(1.0/CLIENT_FPS, callback, arg);
 }
 
@@ -811,6 +826,12 @@ int main(int argc, char *argv[])
         packet[pos++] = flags;
         g_cs->write(packet, pos, true);
     }
+
+#ifdef WITH_AUDIO
+    /* Initialize audio */
+    g_audio = Audio::instance();
+    if (g_audio) g_audio->play_music("pizzaworm.mod");
+#endif
 
     Fl::add_timeout(0, callback, NULL);
     Fl::run();

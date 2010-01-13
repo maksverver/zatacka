@@ -1,12 +1,19 @@
 include ../base.mk
 
-FLTKC=fltk-config
-CXXFLAGS+=`$(FLTKC) --cxxflags` -I..
-LDFLAGS+=`$(FLTKC) --ldstaticflags`
+FLTKCFG=fltk-config
+#LIBMIKMODCFG=libmikmod-config
+CXXFLAGS+=`$(FLTKCFG) --cxxflags` -I..
+LDFLAGS+=`$(FLTKCFG) --ldstaticflags`
 LDLIBS+=../common/common.a
 OBJS=	ClientSocket.o Config.o GameModel.o GameView.o KeyWindow.o \
 	KeyboardPlayerController.o MainWindow.o MainGameView.o \
 	ScoreView.o zatacka.o
+
+ifdef LIBMIKMODCFG
+OBJS+=Audio.o
+CXXFLAGS+=-DWITH_AUDIO=1 `$(LIBMIKMODCFG) --cflags`
+LDLIBS+=`$(LIBMIKMODCFG) --libs`
+endif
 
 all: zatacka
 	make -C bots all

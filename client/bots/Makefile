@@ -1,6 +1,6 @@
 include ../../base.mk
 
-FLTKC=fltk-config
+FLTKCONFIG=fltk-config
 CXXFLAGS+=-I../.. -fPIC
 
 all: DemoBot.so Tipsy.so Twirly.so
@@ -14,9 +14,9 @@ Twirly.so: Twirly.o SimpleSearch.o ../../common/common.a
 Tipsy.so: Tipsy.o SimpleSearch.o ../../common/common.a
 	$(CXX) -fPIC -shared $^ -o $@
 
-Hybrid.o: Hybrid.cpp; $(CXX) $(CXXFLAGS) `$(FLTKC) --cxxflags` -c $<
+Hybrid.o: Hybrid.cpp; $(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
 Hybrid.so: Hybrid.o SimpleSearch.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ `fltk-config --ldstaticflags` -o $@
+	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldstaticflags` -o $@
 
 clean:
 	rm -f *.o
