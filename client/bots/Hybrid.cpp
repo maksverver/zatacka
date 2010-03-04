@@ -1,6 +1,6 @@
 #include "SimpleSearch.h"
 #include <stdlib.h>
-#include <FL/Fl.h>
+#include <FL/Fl.H>
 #include <stdio.h>
 
 class Hybrid : public SimpleSearch
