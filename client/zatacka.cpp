@@ -617,7 +617,7 @@ static void disconnect()
     if (g_cs != NULL) g_cs->write(msg, sizeof(msg), true);
 }
 
-/* Send a chat message, assuming it is send by a human player.
+/* Send a chat message, assuming it is sent by a human player.
    (This function is called from MainWindow) */
 void send_chat_message(const std::string &text)
 {
