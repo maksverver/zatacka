@@ -23,6 +23,11 @@ DemoBotWin.o: DemoBotWin.cpp
 DemoBotWin.so: DemoBotWin.o ../../common/common.a
 	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
 
+PlotBot.o: PlotBot.cpp
+	$(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
+PlotBot.so: PlotBot.o ../../common/common.a
+	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
+
 clean:
 	rm -f *.o
 

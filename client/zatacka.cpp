@@ -309,6 +309,9 @@ static void send_chat_message(const std::string &name, const std::string &text)
 static void player_move(int n, Move move)
 {
     Player &pl = g_players[n];
+    Position npos = pl.pos;
+    const double move_rate = pl.timestamp < g_gp.warmup ? 0 : g_gp.move_rate;
+    const double turn_rate = g_gp.turn_rate;
 
     /* Change sprite after warmup period ends */
     if (pl.timestamp == g_gp.warmup)
@@ -332,7 +335,6 @@ static void player_move(int n, Move move)
         pl.hole = g_gp.hole_length_min +
                  pl.rng_base/g_gp.hole_probability %
                  (g_gp.hole_length_max - g_gp.hole_length_min + 1);
-
     }
 
     switch (move)
@@ -349,16 +351,12 @@ static void player_move(int n, Move move)
     case MOVE_TURN_LEFT:
     case MOVE_TURN_RIGHT:
         {
-            double move_rate = pl.timestamp < g_gp.warmup ? 0 : g_gp.move_rate;
-            Position npos = pl.pos;
-            position_update(&npos, move, move_rate, g_gp.turn_rate);
+            position_update(&npos, move, move_rate, turn_rate);
             if (move_rate > 0 && pl.hole == 0)
             {
                 g_window->gameView()->line(&pl.pos, &npos, n);
             }
-            g_players[n].pos = npos;
-        };
-        break;
+        } break;
 
     case MOVE_DEAD:
         if (!pl.dead)
@@ -374,7 +372,17 @@ static void player_move(int n, Move move)
         }
         break;
     }
+
+    /* Notify controllers of move (useful for bots): */
+    for (size_t m = 0; m < g_my_controllers.size(); ++m)
+    {
+        g_my_controllers[m]->watch_player( n, pl.timestamp, move,
+            move_rate, turn_rate, pl.hole == 0, pl.pos, npos );
+    }
+
+    /* Update common player state: */
     pl.last_move = move;
+    g_players[n].pos = npos;
 
 #ifdef DEBUG
     if (!pl.dead && fp_trace != NULL)

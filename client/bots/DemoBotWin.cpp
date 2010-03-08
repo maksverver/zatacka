@@ -1,4 +1,4 @@
-/* A demo bot with a separte window to display debug data. */
+/* A demo bot with a separate window to display debug data. */
 
 #include <client/PlayerController.h>
 #include <math.h>
@@ -14,11 +14,11 @@ public:
 
     void draw()
     {
-	// Clear background
-	fl_color(FL_BLACK);
+        // Clear background
+        fl_color(FL_BLACK);
         fl_rectf(0, 0, w(), h());
 
-	// Draw an arrow
+        // Draw an arrow
         fl_push_matrix();
         fl_translate(0.5*w(), 0.5*h());
         fl_scale(0.4*w(), 0.4*h());
@@ -82,7 +82,7 @@ void DemoBotWin::restart(const GameParameters &gp)
     last_move = MOVE_FORWARD;
     warmup    = gp.warmup;
     period    = (int)(0.75*2.0*M_PI/gp.turn_rate);
-    if (window) window->redraw();
+    window->redraw();
 }
 
 /* Select a move to make at the given timestamp. */
@@ -113,6 +113,6 @@ Move DemoBotWin::move( int timestamp, const Player *players,
         int t = timestamp - warmup + period/2;
         last_move = (t/period)%2 ? MOVE_TURN_LEFT : MOVE_TURN_RIGHT;
     }
-    if (window) window->redraw();
+    window->redraw();
     return last_move;
 }

@@ -44,6 +44,21 @@ public:
         (void)text;
     };
 
+    /* Low-level callback to receive all incoming player move data. */
+    virtual void watch_player( int player_index, int timestamp, Move move,
+        double move_rate, double turn_rate, bool solid,
+        const Position &old_pos, const Position &new_pos )
+    {
+        (void)player_index;
+        (void)timestamp;
+        (void)move;
+        (void)move_rate;
+        (void)turn_rate;
+        (void)solid;
+        (void)old_pos;
+        (void)new_pos;
+    }
+
     /* Call this method to queue an outgoing chat message */
     void say(const std::string &text)
     {

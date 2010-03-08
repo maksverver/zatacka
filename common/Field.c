@@ -121,7 +121,7 @@ static int draw_poly(Field *field, const Point *pts, int npt, int col)
 #define OOR(x) ((x) < -100 || (x) > FIELD_SIZE+100)
 
 int field_line_th( Field *field, const Position *p, const Position *q,
-                   double th, int col, Rect *rect)
+                   double th, int col, Rect *rect )
 {
     double dx1 = -sin(p->a), dy1 = cos(p->a);
     double dx2 = -sin(q->a), dy2 = cos(q->a);
