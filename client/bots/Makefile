@@ -16,7 +16,12 @@ Tipsy.so: Tipsy.o SimpleSearch.o ../../common/common.a
 
 Hybrid.o: Hybrid.cpp; $(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
 Hybrid.so: Hybrid.o SimpleSearch.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldstaticflags` -o $@
+	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
+
+DemoBotWin.o: DemoBotWin.cpp
+	$(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
+DemoBotWin.so: DemoBotWin.o ../../common/common.a
+	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
 
 clean:
 	rm -f *.o

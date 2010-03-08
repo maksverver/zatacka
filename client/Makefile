@@ -3,7 +3,7 @@ include ../base.mk
 FLTKCFG=fltk-config
 #LIBMIKMODCFG=libmikmod-config
 CXXFLAGS+=`$(FLTKCFG) --cxxflags` -I..
-LDFLAGS+=`$(FLTKCFG) --ldstaticflags`
+LDFLAGS+=`$(FLTKCFG) --ldflags`
 LDLIBS+=../common/common.a
 OBJS=	ClientSocket.o Config.o GameModel.o GameView.o KeyWindow.o \
 	KeyboardPlayerController.o MainWindow.o MainGameView.o \
