@@ -366,7 +366,10 @@ static void player_move(int n, Move move)
             pl.dead = true;
             g_window->gameView()->setSpriteType(n, Sprite::HIDDEN);
 #ifdef WITH_AUDIO
-            if (g_audio) g_audio->play_sample(1 + rand()%2);
+            if (g_audio)
+            {
+                if (pl.timestamp > g_gp.warmup) g_audio->play_sample(1 + rand()%2);
+            }
 #endif /* def WITH_AUDIO */
         }
         break;
