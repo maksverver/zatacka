@@ -175,5 +175,5 @@ int field_line_th( Field *field, const Position *p, const Position *q,
 int field_line( Field *field, const Position *p, const Position *q,
                 int col, Rect *rect)
 {
-    return field_line_th(field, p, q, 7e-3*FIELD_SIZE, col, rect);
+    return field_line_th(field, p, q, LINE_WIDTH, col, rect);
 }

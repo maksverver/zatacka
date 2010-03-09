@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 #define FIELD_SIZE (2000)
+#define LINE_WIDTH   (14)  /* this should have been a game parameter */
 
 typedef unsigned char (Field)[FIELD_SIZE][FIELD_SIZE];
 

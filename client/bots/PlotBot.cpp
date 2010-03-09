@@ -107,7 +107,7 @@ public:
 
         if ((p.x != q.x || p.y != q.y) && solid)
         {
-            const float th = 7e-3*FIELD_SIZE;
+            const float th = LINE_WIDTH;
             float dx1 = -sin(p.a), dy1 = cos(p.a);
             float dx2 = -sin(q.a), dy2 = cos(q.a);
 
@@ -118,10 +118,10 @@ public:
                     FIELD_SIZE*p.y + 0.5f - 0.5f*th*dy1 },
                   { FIELD_SIZE*p.x + 0.5f + 0.5f*th*dx1,
                     FIELD_SIZE*p.y + 0.5f + 0.5f*th*dy1 },
-                  { (FIELD_SIZE*q.x + 0.5 + 0.5*th*dx2),
-                    (FIELD_SIZE*q.y + 0.5 + 0.5*th*dy2) },
-                  { (FIELD_SIZE*q.x + 0.5 - 0.5*th*dx2),
-                    (FIELD_SIZE*q.y + 0.5 - 0.5*th*dy2) } } };
+                  { FIELD_SIZE*q.x + 0.5f + 0.5f*th*dx2,
+                    FIELD_SIZE*q.y + 0.5f + 0.5f*th*dy2 },
+                  { FIELD_SIZE*q.x + 0.5f - 0.5f*th*dx2,
+                    FIELD_SIZE*q.y + 0.5f - 0.5f*th*dy2 } } };
             window->add(quad);
         }
     }
