@@ -2,8 +2,8 @@ include Makefile
 
 LDLIBS+=-lws2_32 -Wl,--subsystem,windows
 
-all: zatacka.exe
-	make -C bots -f Makefile.win32 all
+default: zatacka.exe
+	make -C bots -f Makefile.win32
 
 zatacka.exe: zatacka
 	cp zatacka zatacka.exe
