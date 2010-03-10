@@ -80,7 +80,7 @@ void MainWindow::setTrafficStats( int bytes_in, int packets_in,
                                   int bytes_out, int packets_out )
 {
     snprintf( net_box_label, sizeof(net_box_label),
-              "IN: %d (%'d B)\nOUT: %d (%'d B)",
+              "IN: %d (%d B)\nOUT: %d (%d B)",
               packets_in, bytes_in, packets_out, bytes_out );
     net_box->label(net_box_label);
 }
