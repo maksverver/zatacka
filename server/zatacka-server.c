@@ -1261,7 +1261,7 @@ static int run()
             else
             {
                 cl->buf_pos += read;
-                if (cl->buf_pos >= 2)
+                while (cl->buf_pos >= 2)
                 {
                     int len = 256*cl->buf[0] + cl->buf[1];
                     if (len > MAX_PACKET_LEN)
