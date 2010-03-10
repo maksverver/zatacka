@@ -11,7 +11,7 @@ bool position_update( Position *position, Move move,
     else if (move == MOVE_TURN_RIGHT) da = -turn_rate;
     else return false;
 
-    dl = move_rate * (da ? sin(turn_rate/2)/(turn_rate/2) : 1);
+    dl = move_rate * (da ? sin(da/2)/(da/2) : 1);
 
     position->x += dl*cosl(position->a + 0.5*da);
     position->y += dl*sinl(position->a + 0.5*da);

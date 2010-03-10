@@ -8,7 +8,7 @@ default: DemoBot.so Tipsy.so Twirly.so
 all: default DemoBotWin.so Hybrid.so PlotBot.so
 
 SimpleSearch.a: SimpleSearch.o
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 %.so: %.o SimpleSearch.a ../../common/common.a
 	$(CXX) $(LDFLAGS) -shared $^ -o $@
