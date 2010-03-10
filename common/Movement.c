@@ -4,28 +4,18 @@
 bool position_update( Position *position, Move move,
                       double move_rate, double turn_rate )
 {
-    long double na = position->a;
+    double da, dl;
 
-    switch (move)
-    {
-    case MOVE_FORWARD:
-        break;
+    if (move == MOVE_FORWARD)         da =  0;
+    else if (move == MOVE_TURN_LEFT)  da =  turn_rate;
+    else if (move == MOVE_TURN_RIGHT) da = -turn_rate;
+    else return false;
 
-    case MOVE_TURN_LEFT:
-        na += turn_rate;
-        break;
+    dl = move_rate * (da ? sin(turn_rate/2)/(turn_rate/2) : 1);
 
-    case MOVE_TURN_RIGHT:
-        na -= turn_rate;
-        break;
-
-    default:
-        return false;
-    }
-
-    position->x += (long double)move_rate*cosl(0.5*(position->a + na));
-    position->y += (long double)move_rate*sinl(0.5*(position->a + na));
-    position->a = na;
+    position->x += dl*cosl(position->a + 0.5*da);
+    position->y += dl*sinl(position->a + 0.5*da);
+    position->a += da;
 
     return true;
 }
