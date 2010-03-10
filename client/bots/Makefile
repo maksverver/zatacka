@@ -1,35 +1,19 @@
 include ../../base.mk
 
-FLTKCONFIG=../../fltk-1.3/bin/fltk-config
-CXXFLAGS+=-I../.. -fPIC
+CXXFLAGS+=-I../.. `$(FLTKCONFIG) --cxxflags`
+LDFLAGS+=-fPIC -Wl,--as-needed `$(FLTKCONFIG) --ldflags`
 
-all: DemoBot.so Tipsy.so Twirly.so
+default: DemoBot.so Tipsy.so Twirly.so
 
-%.so: %.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ -o $@
+all: default DemoBotWin.so Hybrid.so PlotBot.so
 
-Twirly.so: Twirly.o SimpleSearch.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ -o $@
+SimpleSearch.a: SimpleSearch.o
+	ar rcs $@ $^
 
-Tipsy.so: Tipsy.o SimpleSearch.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ -o $@
-
-Hybrid.o: Hybrid.cpp; $(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
-Hybrid.so: Hybrid.o SimpleSearch.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
-
-DemoBotWin.o: DemoBotWin.cpp
-	$(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
-DemoBotWin.so: DemoBotWin.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
-
-PlotBot.o: PlotBot.cpp
-	$(CXX) $(CXXFLAGS) `$(FLTKCONFIG) --cxxflags` -c $<
-PlotBot.so: PlotBot.o ../../common/common.a
-	$(CXX) -fPIC -shared $^ `$(FLTKCONFIG) --ldflags` -o $@
-
+%.so: %.o SimpleSearch.a ../../common/common.a
+	$(CXX) $(LDFLAGS) -shared $^ -o $@
 clean:
-	rm -f *.o
+	rm -f *.o *.a
 
 distclean: clean
 	rm -f *.so

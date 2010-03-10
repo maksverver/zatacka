@@ -1,8 +1,8 @@
 
-all:
-	make -C common all
-	make -C client all
-	make -C server all
+default:
+	make -C common
+	make -C client
+	make -C server
 
 clean:
 	make -C common clean
