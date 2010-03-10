@@ -613,6 +613,10 @@ void callback(void *arg)
         }
         g_frame_time    = t;
         g_frame_counter = 0;
+        g_window->setTrafficStats(
+            g_cs->get_bytes_received(), g_cs->get_packets_received(),
+            g_cs->get_bytes_sent(), g_cs->get_packets_sent() );
+        g_cs->clear_stats();
     }
 
 #ifdef WITH_AUDIO

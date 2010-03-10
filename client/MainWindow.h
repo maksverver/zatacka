@@ -16,6 +16,8 @@ public:
     ScoreView *scoreView() { return sv; };
     void setGameId(unsigned gid);
     void setFPS(double fps);
+    void setTrafficStats( int bytes_in, int packets_in,
+                          int bytes_out, int packets_out );
     void resetGameView(int players);
 
 private:
@@ -23,9 +25,11 @@ private:
     ScoreView *sv;          /* the score view */
     Fl_Box *gid_box;        /* box displaying the current game id */
     Fl_Box *fps_box;        /* box displaying the rendering framerate */
+    Fl_Box *net_box;        /* box displaying inbound traffic stats */
 
     char gid_box_label[32];   /* buffer for gid_box label */
     char fps_box_label[32];   /* buffer for fps_box label */
+    char net_box_label[64];   /* buffer for inbound traffic label */
 };
 
 #endif /* ndef MAINWINDOW_H_INCLUDED */
