@@ -58,6 +58,8 @@ static int ip_connect(sockaddr_in &sa_local, sockaddr_in &sa_remote, bool reliab
 ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
     : fd_stream(INVALID_SOCKET), fd_packet(INVALID_SOCKET), stream_pos(0)
 {
+    clear_stats();
+
 #ifdef WIN32
     static bool winsock_initialized = false;
     if (!winsock_initialized)
@@ -108,7 +110,7 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
         return;
     }
 
-/*
+#ifdef NODELAY
     {
 #ifdef WIN32
         BOOL v = TRUE;
@@ -120,7 +122,7 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
             warn("could not put TCP socket in undelayed mode");
         }
     }
-*/
+#endif /* def NODELAY */
 
     if (!reliable_only)
     {
@@ -162,6 +164,9 @@ bool ClientSocket::connected() const
 
 void ClientSocket::write(void const *buf, size_t len, bool reliable)
 {
+    ++packets_sent;
+    bytes_sent += len;
+
     if (len > 4094)
     {
         error("ClientSocket::write(): packet too large");
@@ -265,7 +270,12 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
         }
         stream_pos += len;
         ssize_t res = next_stream_packet(buf, buf_len);
-        if (res != 0) return res;
+        if (res != 0)
+        {
+            ++packets_received;
+            bytes_received += res;
+            return res;
+        }
     }
 
     if (fd_packet != INVALID_SOCKET && FD_ISSET(fd_packet, &readfds))
@@ -275,8 +285,21 @@ ssize_t ClientSocket::read(void *buf, size_t buf_len)
         /* Randomly drop incoming packet */
         if (g_packetloss != 0 && rand() < RAND_MAX*g_packetloss) res = 0;
 
-        if (res != 0) return res;
+        if (res != 0)
+        {
+            ++packets_received;
+            bytes_received += res;
+            return res;
+        }
     }
 
     return 0;
+}
+
+void ClientSocket::clear_stats()
+{
+    bytes_sent       = 0;
+    bytes_received   = 0;
+    packets_sent     = 0;
+    packets_received = 0;
 }

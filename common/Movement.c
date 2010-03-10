@@ -23,8 +23,8 @@ bool position_update( Position *position, Move move,
         return false;
     }
 
-    position->x += (long double)move_rate*cosl(na);
-    position->y += (long double)move_rate*sinl(na);
+    position->x += (long double)move_rate*cosl(0.5*(position->a + na));
+    position->y += (long double)move_rate*sinl(0.5*(position->a + na));
     position->a = na;
 
     return true;

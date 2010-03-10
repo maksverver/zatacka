@@ -1,6 +1,6 @@
 include ../base.mk
 
-FLTKCFG=fltk-config
+FLTKCFG=../fltk-1.3/bin/fltk-config
 #LIBMIKMODCFG=libmikmod-config
 CXXFLAGS+=`$(FLTKCFG) --cxxflags` -I..
 LDFLAGS+=`$(FLTKCFG) --ldflags`

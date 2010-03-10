@@ -19,6 +19,11 @@ MainWindow::MainWindow( int width, int height,
     fps_box->labelsize(12);
     fps_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
     fps_box->align(FL_ALIGN_INSIDE);
+    net_box = new Fl_Box(height, height - 80, width - height, 40);
+    net_box->labelfont(FL_HELVETICA);
+    net_box->labelsize(12);
+    net_box->labelcolor(fl_gray_ramp(2*FL_NUM_GRAY/3));
+    net_box->align(FL_ALIGN_INSIDE);
     end();
     if (fullscreen)
     {
@@ -54,20 +59,30 @@ void MainWindow::resize(int x, int y, int w, int h)
     sv->update(g_players);  // HACK
     gid_box->resize(gv_size, h - 20, w - gv_size, 20);
     fps_box->resize(gv_size, h - 40, w - gv_size, 20);
+    net_box->resize(gv_size, h - 80, w - gv_size, 40);
     return Fl_Double_Window::resize(x, y, w, h);
 }
 
 void MainWindow::setGameId(unsigned gid)
 {
-    sprintf(gid_box_label, "%08X", gid);
+    snprintf(gid_box_label, sizeof(gid_box_label), "%08X", gid);
     gid_box->label(gid_box_label);
 }
 
 void MainWindow::setFPS(double fps)
 {
     if (fps > 999) fps = 999;
-    sprintf(fps_box_label, "%.3f FPS", fps);
+    snprintf(fps_box_label, sizeof(fps_box_label), "%.3f FPS", fps);
     fps_box->label(fps_box_label);
+}
+
+void MainWindow::setTrafficStats( int bytes_in, int packets_in,
+                                  int bytes_out, int packets_out )
+{
+    snprintf( net_box_label, sizeof(net_box_label),
+              "IN: %d (%'d B)\nOUT: %d (%'d B)",
+              packets_in, bytes_in, packets_out, bytes_out );
+    net_box->label(net_box_label);
 }
 
 void MainWindow::resetGameView(int players)

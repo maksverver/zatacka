@@ -1,6 +1,6 @@
 include ../../base.mk
 
-FLTKCONFIG=fltk-config
+FLTKCONFIG=../../fltk-1.3/bin/fltk-config
 CXXFLAGS+=-I../.. -fPIC
 
 all: DemoBot.so Tipsy.so Twirly.so
