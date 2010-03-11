@@ -18,7 +18,7 @@ public:
     void setFPS(double fps);
     void setTrafficStats( int bytes_in, int packets_in,
                           int bytes_out, int packets_out );
-    void resetGameView(int players);
+    void resetGameView(int players, double line_width);
 
 private:
     MainGameView *gv;       /* the play area (with chat overlay) */

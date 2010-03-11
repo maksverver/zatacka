@@ -5,3 +5,4 @@ Changes since 1.0-beta10:
  - tweaked movement formula slightly; makes clients incompatible!
  - changed network protocol to be more bandwidth-efficient
  - (temporarily?) removed unreliable transfer option
+ - player's line width is a game parameter now

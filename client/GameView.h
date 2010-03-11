@@ -28,7 +28,8 @@ public:
     void resize(int x, int y, int w, int h);
 
     void renderOffscreen(int x1, int y1, int x2, int y2);
-    void line(const Position *p, const Position *q, int n);
+    void setLineWidth(double lw);
+    void drawLine(const Position *p, const Position *q, int n);
 
     Fl_Color spriteColor(int n) { return sprites[n].col; };
     Sprite::SpriteType spriteType(int n) { return sprites[n].type; }
@@ -53,8 +54,9 @@ protected:
     void damageSprite(int n);
 
 private:
+    const bool antialiasing;
+    double line_width;
     bool offscr_created;
-    bool antialiasing;
     Fl_Offscreen offscr;
     std::vector<Sprite> sprites;
     Field m_field;

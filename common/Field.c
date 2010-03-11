@@ -172,8 +172,3 @@ int field_line_th( Field *field, const Position *p, const Position *q,
     return draw_poly(field, pts, 4, col);
 }
 
-int field_line( Field *field, const Position *p, const Position *q,
-                int col, Rect *rect)
-{
-    return field_line_th(field, p, q, LINE_WIDTH, col, rect);
-}

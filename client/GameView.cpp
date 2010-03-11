@@ -2,8 +2,9 @@
 #include <algorithm>
 #include <string.h>
 
-GameView::GameView(int x, int y, int w, int h, bool antialiasing)
-    : Fl_Widget(x, y, w, h), offscr_created(false), antialiasing(antialiasing)
+GameView::GameView(int x, int y, int w, int h, bool aa)
+    : Fl_Widget(x, y, w, h), antialiasing(aa),
+      line_width(),  offscr_created(false)
 {
     memset(m_field, 0, sizeof(m_field));
 }
@@ -83,10 +84,17 @@ void GameView::renderOffscreen(int x1, int y1, int x2, int y2)
     damage(1);
 }
 
-void GameView::line(const Position *p, const Position *q, int n)
+void GameView::setLineWidth(double lw)
+{
+    if (lw < 0) lw = 0;
+    if (lw > 1) lw = 1;
+    line_width = lw;
+}
+
+void GameView::drawLine(const Position *p, const Position *q, int n)
 {
     Rect r;
-    field_line(&m_field, p, q, n + 1, &r);
+    field_line_th(&m_field, p, q, FIELD_SIZE*line_width, n + 1, &r);
 
     int w = this->w(), h = this->h();
     int x1 = r.x1*w/FIELD_SIZE, x2 = (r.x2*w + FIELD_SIZE - 1)/FIELD_SIZE;
@@ -122,12 +130,12 @@ void GameView::draw()
             fl_push_matrix();
             fl_translate(x() + sprites[n].x, y() + sprites[n].y);
             fl_rotate(180/M_PI*sprites[n].a);
-            fl_scale(1e-3*this->w());
+            fl_scale(this->w());
             fl_color(sprites[n].col);
             fl_begin_polygon();
-            fl_vertex( -14,  11);
-            fl_vertex(  14,   0);
-            fl_vertex( -14, -11);
+            fl_vertex( -2*line_width,  1.5*line_width );
+            fl_vertex(  2*line_width,               0 );
+            fl_vertex( -2*line_width, -1.5*line_width );
             fl_end_polygon();
             fl_pop_matrix();
         }
@@ -137,12 +145,12 @@ void GameView::draw()
             fl_push_matrix();
             fl_translate(x() + sprites[n].x, y() + sprites[n].y);
             fl_rotate(180/M_PI*sprites[n].a);
-            fl_scale(1e-3*this->w());
+            fl_scale(this->w());
             fl_color(sprites[n].col);
             fl_begin_polygon();
-            fl_vertex(-10,  7);
-            fl_vertex(  5,  0);
-            fl_vertex(-10, -7);
+            fl_vertex( -1.5*line_width,  line_width );
+            fl_vertex( 0.75*line_width,           0 );
+            fl_vertex( -1.5*line_width, -line_width );
             fl_end_polygon();
             fl_pop_matrix();
         }

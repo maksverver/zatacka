@@ -50,6 +50,7 @@ typedef int socklen_t;
 #define PLAYERS_PER_CLIENT     (4)
 #define TURN_RATE             (48)
 #define MOVE_RATE              (6)
+#define LINE_WIDTH             (7)
 #define SCORE_HISTORY         (10)
 #define HOLE_PROBABILITY      (60)
 #define HOLE_LENGTH_MIN        (3)
@@ -580,15 +581,18 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             error("(MOVE) received invalid move %d", m);
             player_kill(pl);
         }
-        else
-        if (pl->moves_queue_len == MOVE_BACKLOG)
+
+        if (pl->dead_since == -1)
         {
-            error("(MOVE) player move queue is full");
-            player_kill(pl);
-        }
-        else
-        {
-            pl->moves_queue[pl->moves_queue_len++] = m;
+            if (pl->moves_queue_len == MOVE_BACKLOG)
+            {
+                error("(MOVE) player move queue is full");
+                player_kill(pl);
+            }
+            else
+            {
+                pl->moves_queue[pl->moves_queue_len++] = m;
+            }
         }
     }
 }
@@ -836,6 +840,7 @@ static void restart_game()
     packet_write_byte(SERVER_FPS);
     packet_write_byte(TURN_RATE);
     packet_write_byte(MOVE_RATE);
+    packet_write_byte(LINE_WIDTH);
     packet_write_byte(WARMUP);
     packet_write_byte(SCORE_HISTORY);
     packet_write_byte((HOLE_PROBABILITY >> 8)&255);
@@ -948,10 +953,13 @@ static void do_player_move(Player *pl, Move m)
 
     if (v > 0)
     {
+        int color = pl->hole > 0 ? -1 : pl->index + 1;
+
         /* Fill and test new line segment */
-        if ( field_line( &g_field, &pl->pos, &npos,
-                            pl->hole > 0 ? -1 : pl->index + 1, NULL ) != 0 )
+        if ( field_line_th( &g_field, &pl->pos, &npos,
+                            FIELD_SIZE*1e-3*LINE_WIDTH, color, NULL ) != 0 )
         {
+            /* Player bumped into something! */
             player_kill(pl);
         }
 

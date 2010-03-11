@@ -8,7 +8,6 @@ extern "C" {
 #endif
 
 #define FIELD_SIZE (2000)
-#define LINE_WIDTH   (14)  /* this should have been a game parameter */
 
 typedef unsigned char (Field)[FIELD_SIZE][FIELD_SIZE];
 
@@ -30,12 +29,7 @@ typedef struct Rect
    affected by the drawing operation.
 */
 int field_line_th( Field *field, const Position *p, const Position *q,
-                    double th, int col, Rect *rect );
-
-/* Draw a line segment with a fixed default thickness of 14 pixels;
-   otherwise this function behaves like field_line_th() described above. */
-int field_line( Field *field, const Position *p, const Position *q,
-                int col, Rect *rect );
+                   double th, int col, Rect *rect );
 
 #ifdef __cplusplus
 }

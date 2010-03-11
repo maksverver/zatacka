@@ -165,6 +165,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_gp.data_rate         = buf[pos++];
     g_gp.turn_rate         = 2.0*M_PI/buf[pos++];
     g_gp.move_rate         = 1e-3*buf[pos++];
+    g_gp.line_width        = 1e-3*buf[pos++];
     g_gp.warmup            = buf[pos++];
     g_gp.score_rounds      = buf[pos++];
     g_gp.hole_probability  = buf[pos++]*256;
@@ -178,7 +179,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
     g_gp.gameid           += buf[pos++] << 16;
     g_gp.gameid           += buf[pos++] <<  8;
     g_gp.gameid           += buf[pos++];
-    assert(pos == 17);
+    assert(pos == 18);
 
     info("Restarting game with %d players", g_gp.num_players);
     g_server_timestamp = 0;
@@ -245,7 +246,7 @@ static void handle_STRT(unsigned char *buf, size_t len)
 
     /* Update gameid label & gameview */
     g_window->setGameId(g_gp.gameid);
-    g_window->resetGameView(g_gp.num_players);
+    g_window->resetGameView(g_gp.num_players, g_gp.line_width);
 
     GameView *gv = g_window->gameView();
     for (int n = 0; n < g_gp.num_players; ++n)
@@ -355,7 +356,7 @@ static void player_move(int n, Move move)
             position_update(&npos, move, move_rate, turn_rate);
             if (move_rate > 0 && pl.hole == 0)
             {
-                g_window->gameView()->line(&pl.pos, &npos, n);
+                g_window->gameView()->drawLine(&pl.pos, &npos, n);
             }
         } break;
 
@@ -731,8 +732,7 @@ int main(int argc, char *argv[])
     } while (!g_cs->connected());
 
     /* Create window */
-    g_window = new MainWindow( 800, 600,
-                               cfg.fullscreen(), cfg.antialiasing() );
+    g_window = new MainWindow(800, 600, cfg.fullscreen(), cfg.antialiasing());
     g_window->show();
 
     /* Set-up local players */

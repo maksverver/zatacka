@@ -1,10 +1,7 @@
 Updates which would invalidate the protocol:
- - Update protocol so move history is truncated to the last confirmed timestamp
-   by the client. This is mainly useful to limit the bandwidth used in the
-   reliable connection mode. Requires client to send notification of received
-   game data to the server.
- - Add game parameter for line thickness:
-     2 bytes: 65536*thickness (e.g. 458 ~ 14/2000)
+ - Add unreliable protocol back in (if this has demonstrable advantages?)
+   (See outline in new-network-protocol.txt)
+ - Support viewing the game-in-progress when a client joins.
 
 1.0:
  - name & branding

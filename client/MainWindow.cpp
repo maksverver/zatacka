@@ -85,8 +85,9 @@ void MainWindow::setTrafficStats( int bytes_in, int packets_in,
     net_box->label(net_box_label);
 }
 
-void MainWindow::resetGameView(int players)
+void MainWindow::resetGameView(int players, double line_width)
 {
     gv->clear();
     gv->setSprites(players);
+    gv->setLineWidth(line_width);
 }

@@ -12,6 +12,7 @@ struct GameParameters
     int data_rate;          /* moves per second */
     double turn_rate;       /* radians per move */
     double move_rate;       /* units per move */
+    double line_width;      /* thickness of line */
     int warmup;             /* number of turns to wait before moving */
     int score_rounds;       /* number of rounds for the moving average score */
     int hole_probability;   /* probability of a hole (1/g_hole_probability) */

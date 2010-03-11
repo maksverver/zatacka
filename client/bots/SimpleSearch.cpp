@@ -30,7 +30,8 @@ int SimpleSearch::search(Position pos, int depth, Move *move_out)
         {
             old_pos = new_pos;
             position_update(&new_pos, moves[i], gp.move_rate, gp.turn_rate);
-            col += field_line( (Field*)field, &old_pos, &new_pos, -1, NULL);
+            col += field_line_th( (Field*)field, &old_pos, &new_pos,
+                                  FIELD_SIZE*gp.line_width, -1, NULL );
         }
 
         if (col == 0)
