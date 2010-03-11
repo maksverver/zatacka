@@ -3,3 +3,5 @@ Changes since 1.0-beta10:
  - removed fullscreen option in Windows (it never worked properly)
  - client displays data traffic (useful for network debugging)
  - tweaked movement formula slightly; makes clients incompatible!
+ - changed network protocol to be more bandwidth-efficient
+ - (temporarily?) removed unreliable transfer option

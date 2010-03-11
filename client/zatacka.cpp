@@ -31,12 +31,11 @@ MainWindow *g_window;   /* main window */
 ClientSocket *g_cs;     /* client connection to the server */
 GameParameters g_gp;    /* game parameters */
 
-int g_last_timestamp;   /* last timestamp received */
+int g_server_timestamp;   /* last timestamp received */
 int g_local_timestamp;  /* local estimated timestamp */
 double g_server_time;   /* estimated server time at timestamp 0 */
 
 std::vector<std::string> g_my_names;    /* my player names */
-std::vector<std::string> g_my_moves;    /* my recent moves (each g_gp.move_backlog long) */
 std::vector<int>         g_my_players;  /* indices of my players in g_players */
 std::vector<int>         g_my_indices;
 std::vector<PlayerController*> g_my_controllers;
@@ -182,12 +181,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
     assert(pos == 17);
 
     info("Restarting game with %d players", g_gp.num_players);
-    g_last_timestamp = -1;
+    g_server_timestamp = 0;
     g_local_timestamp = 0;
     g_players = std::vector<Player>(g_gp.num_players);
     g_names   = std::vector<std::string>(g_gp.num_players);
-    g_my_moves = std::vector<std::string> (
-        g_my_names.size(), std::string((size_t)g_gp.move_backlog, 0) );
     g_my_players = std::vector<int>(g_my_names.size(), -1);
     g_my_indices = std::vector<int>(g_gp.num_players, -1);
 
@@ -268,6 +265,10 @@ static void handle_STRT(unsigned char *buf, size_t len)
     {
         (*it)->restart(g_gp);
     }
+
+    /* Acknowledge game start */
+    unsigned char msg[1] = { MRCS_STRT };
+    g_cs->write(msg, sizeof(msg), true);
 }
 
 static void handle_SCOR(unsigned char *buf, size_t len)
@@ -411,39 +412,36 @@ static void forward_to(int timestamp)
 {
     const Field &field = g_window->gameView()->field();
 
-    if (g_local_timestamp >= timestamp) return;
-
     while (g_local_timestamp < timestamp)
     {
-        for (size_t n = 0; n < g_my_moves.size(); ++n)
+        /* Create new move packet: */
+        char packet[1 + g_my_players.size()];
+        size_t packet_len = 0;
+        packet[packet_len++] = MUCS_MOVE;
+
+        for (size_t n = 0; n < g_my_players.size(); ++n)
         {
             int p = g_my_players[n];
             if (p < 0) continue;
 
-            std::string &moves = g_my_moves[n];
-            std::rotate(moves.begin(), moves.begin() + 1, moves.end());
-
             /* Fill in new moves */
-            Move m;
-            if (g_players[p].dead)
-            {
-                m = MOVE_FORWARD;   /* dummy move */
-            }
-            else
+            Move m = MOVE_FORWARD;
+            if (!g_players[p].dead)
             {
                 /* Use player controller to get next move */
                 PlayerController *pc = g_my_controllers[n];
                 m = pc->move(g_local_timestamp, &g_players[0], p, field);
             }
-            moves[g_gp.move_backlog - 1] = (unsigned char)m;
             player_update_prediction(p, m);
 
             /* Hide warmup message if client has joined */
             if ( g_local_timestamp < g_gp.warmup &&
-                (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
+                 (m == MOVE_TURN_LEFT || m == MOVE_TURN_RIGHT) )
             {
                 g_window->gameView()->setWarmup(false);
             }
+
+            packet[packet_len++] = (char)m;
         }
 
         /* Process chat messages */
@@ -456,108 +454,42 @@ static void forward_to(int timestamp)
             }
         }
 
-        ++g_local_timestamp;
-    }
+        /* Send new move packet */
+        g_cs->write(packet, packet_len, false);
 
-    /* Send new move packet */
-    if (!g_my_moves.empty())
-    {
-        char packet[4096];
-        size_t pos = 0;
-        packet[pos++] = MUCS_MOVE;
-        packet[pos++] = (g_gp.gameid >> 24)&255;
-        packet[pos++] = (g_gp.gameid >> 16)&255;
-        packet[pos++] = (g_gp.gameid >>  8)&255;
-        packet[pos++] = (g_gp.gameid >>  0)&255;
-        packet[pos++] = (g_local_timestamp >> 24)&255;
-        packet[pos++] = (g_local_timestamp >> 16)&255;
-        packet[pos++] = (g_local_timestamp >>  8)&255;
-        packet[pos++] = (g_local_timestamp >>  0)&255;
-        for (size_t n = 0; n < g_my_moves.size(); ++n)
-        {
-            memcpy(packet + pos, g_my_moves[n].data(), g_gp.move_backlog);
-            pos += g_gp.move_backlog;
-        }
-        g_cs->write(packet, pos, false);
+        ++g_local_timestamp;
     }
 }
 
 static void handle_MOVE(unsigned char *buf, size_t len)
 {
-    if (len < (size_t)9 + g_gp.num_players)
+    if (len%2 != 1)
     {
-        error("(MOVE) packet too small");
+        error("(MOVE) invalid packet length (%d bytes)", len);
         return;
     }
 
-    unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
-    if (gameid != g_gp.gameid)
-    {
-        warn( "(MOVE) packet with invalid game id "
-              "(received %08x; expected %08x)", gameid, g_gp.gameid );
-        return;
-    }
+    ++g_server_timestamp;
 
-    int timestamp = (buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | buf[8];
-    if (timestamp < 0) error("negative timestamp received");
-    if (timestamp < g_last_timestamp)
-    {
-        warn("(MOVE) packet with old timestamp (%d < %d)",
-             timestamp, g_last_timestamp);
-        return;
-    }
-
-    if (g_last_timestamp < g_gp.warmup && timestamp >= g_gp.warmup)
+    if (g_server_timestamp == g_gp.warmup)
     {
         g_window->gameView()->setWarmup(false);
     }
 
     /* Update estimated server time */
     {
-        double t = time_now() - 1.0*timestamp/g_gp.data_rate;
-        if (g_last_timestamp == -1 || t < g_server_time) g_server_time = t;
+        double t = time_now() - 1.0*g_server_timestamp/g_gp.data_rate;
+        if (g_server_timestamp == 1 || t < g_server_time) g_server_time = t;
     }
 
     /* Update moves */
-    size_t pos = 9 + g_gp.num_players;
-    for (int n = 0; n < g_gp.num_players; ++n)
+    for (size_t pos = 1; pos < len; pos += 2)
     {
-        if (!buf[9 + n])
-        {
-            /* Server signaled this player died, and has not included
-               its moves in the packet. */
-            g_players[n].dead = true;
-            continue;
-        }
-
-        /* Copying isn't strictly necessary here, but makes correct processing
-          a lot easier! Don't change unless you know what you are doing! */
-        char moves[256];
-        assert((size_t)g_gp.move_backlog <= sizeof(moves));
-        memcpy(moves, buf + pos, g_gp.move_backlog);
-        pos += g_gp.move_backlog;
-
-        /* Check if we have missed any moves */
-        if (timestamp - g_players[n].timestamp > g_gp.move_backlog)
-        {
-            error("client out of sync!");
-            g_window->gameView()->appendMessage("Client out-of-sync!");
-            g_players[n].dead = true;
-            continue;
-        }
-
-        /* Add missing moves */
-        for ( int i = g_gp.move_backlog - (timestamp - g_players[n].timestamp);
-              i < g_gp.move_backlog; ++i)
-        {
-            if (moves[i] == 0) break;  /* further moves not yet known */
-            player_move(n, (Move)moves[i]);
-        }
-
+        unsigned n = buf[pos], m = buf[pos + 1];
+        if (n >= g_players.size() || m < 1 || m > 4) continue;
+        player_move(n, (Move)m);
         if (g_my_indices[n] == -1) player_reset_prediction(n);
     }
-
-    g_last_timestamp = timestamp;
 
     update_sprites();
 }
@@ -593,7 +525,7 @@ void callback(void *arg)
     /* Do timed events */
     g_window->gameView()->updateTime(time_now());
 
-    if (g_last_timestamp >= 0)
+    if (g_server_timestamp > 0)
     {
         /* Estimate server timestamp */
         double t = time_now();

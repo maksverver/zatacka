@@ -16,12 +16,18 @@ Reliable packets: (client->server)
             L bytes: name
         1 byte: client connection flags
             (0 = TCP+UDP, 1 = TCP-only)
+
    1 Quit
         no data
+
    2 Message
         1 byte: name length (L; L=0 means server)
         L bytes: player name
         rest: message
+
+   3 Acknowledge game restart
+        no data
+
 
 Reliable packets: (server->client)
   64 Message
@@ -66,28 +72,20 @@ Reliable packets: (server->client)
 
 Unreliable packets: (client->server)
  128 Moves
-        4 bytes: game id
-        4 bytes: timestamp
-        For each player (controlled by this client):
-            X bytes: moves (where X == backlog parameter)
+
+    For each player controlled by this client:
+        1 byte: move:
                 1: move straight ahead
                 2: turn left
                 3: turn right
 
 Unreliable packets: (server->client)
  192 Moves
-        4 bytes: game id
-        4 bytes: timestamp
-        P bytes: player status (where P == number of players)
-            0 == dead
-            1 == living
-        Then for each living player:
-            X bytes: last moves (where X == backlog parameter)
-                0: unknown
-                1: move ahead
+
+    For each move:
+        1 byte: player index
+        1 byte: move:
+                1: move straight ahead
                 2: turn left
                 3: turn right
-           NB. the bytes correspond to commands given for timeslot
-               timestamp-X through timestamp-1 (inclusive); for negative
-               timeslots, moves are set to 0. When moves are not (yet) known,
-               moves at the end of the list are set to 0 as well.
+                4: player died

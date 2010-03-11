@@ -16,7 +16,7 @@ Config::Config()
 
     m_hostname = "localhost";
     m_port = 12321;
-    m_reliable_only = false;
+    m_reliable_only = true;
 
     m_num_players = 1;
     m_player_index[0] = 0;
@@ -173,7 +173,10 @@ bool Config::show_window()
     w_port->value(port_buf);
     w_reliable_only = new Fl_Check_Button(110, 180, 160, 20,
         "&Reliable conn. only");
-    w_reliable_only->value(m_reliable_only);
+    // w_reliable_only->value(m_reliable_only);
+    // Temporarily disabled:
+    w_reliable_only->value(true);
+    w_reliable_only->deactivate();
     network->end();
 
     Fl_Group *players = new Fl_Group(10, 240, 280, 180, "Players");

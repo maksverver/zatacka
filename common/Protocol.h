@@ -9,6 +9,7 @@ typedef enum Message
     MRCS_HELO =   0,
     MRCS_QUIT =   1,
     MRCS_CHAT =   2,
+    MRCS_STRT =   3,
 
     /* reliable server->client */
     MRSC_MESG =  64,

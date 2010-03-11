@@ -45,7 +45,6 @@ typedef int socklen_t;
 #define MAX_CLIENTS           (64)
 #define SERVER_FPS            (30)
 #define MOVE_BACKLOG          (60)
-#define MOVE_SYNCLOG          (40)
 #define MAX_PACKET_LEN      (4094)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
@@ -75,7 +74,8 @@ typedef struct Player
 
     /* Move buffer */
     int             timestamp;
-    char            moves[MOVE_BACKLOG];
+    char            moves_queue[MOVE_BACKLOG];
+    int             moves_queue_len;
     bool            has_moved;              /* did player move during warmup? */
 
     /* Player info */
@@ -110,6 +110,7 @@ typedef struct Client
     /* Set to true only if this client is currently in use */
     bool            in_use;
     bool            hailed;        /* have we received a HELO? */
+    bool            started;       /* game start acknowledged? */
     int             protocol;      /* protocol version used by the client */
     int             flags;         /* connection flags */
 
@@ -449,6 +450,7 @@ static void handle_packet( Client *cl, unsigned char *buf, size_t len,
     case MUCS_MOVE: return handle_MOVE(cl, buf, len);
     case MRCS_CHAT: return handle_CHAT(cl, buf, len);
     case MRCS_QUIT: return client_disconnect(cl, "client quit");
+    case MRCS_STRT: cl->started = true; return;
     default: client_disconnect(cl, "invalid packet type");
     }
 }
@@ -556,144 +558,38 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
 
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 {
+    if (!cl->started) return;
+
     size_t P = 0;
 
     while (P < PLAYERS_PER_CLIENT && cl->players[P].in_use) ++P;
 
-    if (len != 9 + P*MOVE_BACKLOG)
+    if (len != 1 + P)
     {
         error( "(MOVE) invalid length packet received from client %d "
-               "(received %d; expected %d)", cl - g_clients,
-               len, 9 + P*MOVE_BACKLOG );
-        return;
-    }
-
-    unsigned gameid = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
-    if (gameid != g_gameid)
-    {
-        info( "(MOVE) packet with invalid game id from client %d "
-              "(received %08x; expected %08x)", cl - g_clients, gameid, g_gameid);
-        return;
-    }
-
-    int timestamp = (buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | buf[8];
-    if (timestamp > g_timestamp + 1)
-    {
-        error( "(MOVE) timestamp too great (received: %d; expected %d)",
-                timestamp, g_timestamp + 1 );
+               "(received %d; expected %d)", cl - g_clients, len, 1 + P );
         return;
     }
 
     for (size_t p = 0; p < P; ++p)
     {
         Player *pl = &cl->players[p];
-
-        int added = timestamp - pl->timestamp;
-        if (added < 0)
+        int m = buf[1 + p];
+        if (m < 1 || m > 4)
         {
-            warn("(MOVE) discarded out-of-order move packet");
-            return;
+            error("(MOVE) received invalid move %d", m);
+            player_kill(pl);
         }
-        if (added > MOVE_BACKLOG)
+        else
+        if (pl->moves_queue_len == MOVE_BACKLOG)
         {
-            warn("(MOVE) discarded packet from out-of-sync player");
-            return;
+            error("(MOVE) player move queue is full");
+            player_kill(pl);
         }
-
-        memmove(pl->moves, pl->moves + added, MOVE_BACKLOG - added);
-        memcpy( pl->moves + MOVE_BACKLOG - added,
-                buf + 9 + (p + 1)*MOVE_BACKLOG - added, added );
-
-        for (int n = MOVE_BACKLOG - added; n < MOVE_BACKLOG; ++n)
+        else
         {
-            if (pl->dead_since != -1) pl->moves[n] = 4;
-
-            int m = pl->moves[n];
-            if (m < 1 || m > 4)
-            {
-                error("received invalid move %d\n", m);
-                player_kill(pl);
-            }
-            else
-            if (pl->dead_since == -1)
-            {
-                if ( pl->hole == 0 &&
-                     pl->timestamp >= WARMUP +  HOLE_COOLDOWN &&
-                     pl->timestamp - pl->solid_since >= HOLE_COOLDOWN &&
-                     pl->rng_base%HOLE_PROBABILITY == 0 )
-                {
-                    pl->hole = HOLE_LENGTH_MIN +
-                               (pl->rng_base/HOLE_PROBABILITY)
-                               % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
-                    pl->my_holeid = 1 + (g_num_holes++)%255;
-                }
-
-                /* Calculate movement */
-                int v = (pl->timestamp < WARMUP ? 0 : 1);
-                int a = (m == MOVE_TURN_LEFT)  ? +1 :
-                        (m == MOVE_TURN_RIGHT) ? -1 : 0;
-
-#ifdef REPLAY
-                if (fp_replay != NULL)
-                {
-                    /* Write to replay: player, turn, move*/
-                    fprintf( fp_replay, "MOVE %d %d %d\n",
-                             pl->index, a, (pl->hole ? 2 : v) );
-                }
-#endif
-
-                /* Register movement during warmup */
-                if (!v && a) pl->has_moved = true;
-
-                /* Calculate new position */
-                Position npos = pl->pos;
-                position_update( &npos, (Move)m, v*1e-3*MOVE_RATE,
-                                                 2.0*M_PI/TURN_RATE );
-
-                if (v > 0)
-                {
-                    /* Fill and test new line segment */
-                    if ( field_line( &g_field, &pl->pos, &npos,
-                                     pl->hole > 0 ? -1 : pl->index + 1, NULL )
-                         != 0 )
-                    {
-                        player_kill(pl);
-                    }
-
-                    /* Detect hole crossing */
-                    int holeid = field_line_th( &g_holes, &pl->pos, &npos,
-                        4.0, (pl->hole > 0 ? pl->my_holeid : -1), NULL );
-                    if (holeid < 256 && holeid != pl->cross_holeid)
-                    {
-                        if (pl->cross_holeid != 0)
-                        {
-                            pl->score_holes += 1;
-                            send_scores();
-                        }
-                        pl->cross_holeid = holeid;
-                    }
-                }
-
-                pl->pos = npos;
-
-                if (pl->hole > 0)
-                {
-                    --pl->hole;
-                    pl->solid_since = pl->timestamp + 1;
-                }
-            }
-
-            ++pl->timestamp;
-
-            /* Kill players that do not move during the warmup period */
-            if (pl->timestamp == WARMUP && !pl->has_moved) player_kill(pl);
-
-            unsigned long long rng_next = pl->rng_base*1967773755ull
-                                        + pl->rng_carry;
-            pl->rng_base  = rng_next&0xffffffff;
-            pl->rng_carry = rng_next>>32;
+            pl->moves_queue[pl->moves_queue_len++] = m;
         }
-        assert(pl->timestamp == timestamp);
     }
 }
 
@@ -844,7 +740,7 @@ static void restart_game()
 
         /* Reset player state to starting position */
         pl->timestamp       = 0;
-        memset(pl->moves, 0, sizeof(pl->moves));
+        pl->moves_queue_len = 0;
         pl->has_moved       = false;
         pl->dead_since      = -1;
         pl->pos.x           = rand_int(2048, 65536 - 2048);
@@ -856,6 +752,15 @@ static void restart_game()
         pl->cross_holeid    = 0;
         pl->rng_base        = g_gameid ^ n;
         pl->rng_carry       = 0;
+    }
+
+    /* Intialize clients */
+    for (int n = 0; n < MAX_CLIENTS; ++n)
+    {
+        if (g_clients[n].in_use)
+        {
+            g_clients[n].started = false;
+        }
     }
 
     /* Assign player colors */
@@ -1004,8 +909,89 @@ static void send_scores()
     packet_broadcast(true);
 }
 
+/* Executes one move for the given player and updates his timestamp: */
+static void do_player_move(Player *pl, Move m)
+{
+    assert(pl->dead_since == -1);
+
+    if ( pl->hole == 0 &&
+            pl->timestamp >= WARMUP +  HOLE_COOLDOWN &&
+            pl->timestamp - pl->solid_since >= HOLE_COOLDOWN &&
+            pl->rng_base%HOLE_PROBABILITY == 0 )
+    {
+        pl->hole = HOLE_LENGTH_MIN +
+                    (pl->rng_base/HOLE_PROBABILITY)
+                    % (HOLE_LENGTH_MAX - HOLE_LENGTH_MIN + 1);
+        pl->my_holeid = 1 + (g_num_holes++)%255;
+    }
+
+    /* Calculate movement */
+    int v = (pl->timestamp < WARMUP ? 0 : 1);
+    int a = (m == MOVE_TURN_LEFT)  ? +1 :
+            (m == MOVE_TURN_RIGHT) ? -1 : 0;
+
+#ifdef REPLAY
+    if (fp_replay != NULL)
+    {
+        /* Write to replay: player, turn, move*/
+        fprintf( fp_replay, "MOVE %d %d %d\n",
+                    pl->index, a, (pl->hole ? 2 : v) );
+    }
+#endif
+
+    /* Register movement during warmup */
+    if (!v && a) pl->has_moved = true;
+
+    /* Calculate new position */
+    Position npos = pl->pos;
+    position_update(&npos, (Move)m, v*1e-3*MOVE_RATE, 2.0*M_PI/TURN_RATE);
+
+    if (v > 0)
+    {
+        /* Fill and test new line segment */
+        if ( field_line( &g_field, &pl->pos, &npos,
+                            pl->hole > 0 ? -1 : pl->index + 1, NULL ) != 0 )
+        {
+            player_kill(pl);
+        }
+
+        /* Detect hole crossing */
+        int holeid = field_line_th( &g_holes, &pl->pos, &npos,
+            4.0, (pl->hole > 0 ? pl->my_holeid : -1), NULL );
+        if (holeid < 256 && holeid != pl->cross_holeid)
+        {
+            if (pl->cross_holeid != 0)
+            {
+                pl->score_holes += 1;
+                send_scores();
+            }
+            pl->cross_holeid = holeid;
+        }
+    }
+
+    pl->pos = npos;
+
+    if (pl->hole > 0)
+    {
+        --pl->hole;
+        pl->solid_since = pl->timestamp + 1;
+    }
+
+    /* Kill players that do not move during the warmup period */
+    if (pl->timestamp + 1 == WARMUP && !pl->has_moved) player_kill(pl);
+
+    /* Update player timestamp and RNG: */
+    ++pl->timestamp;
+    unsigned long long rng_next = pl->rng_base*1967773755ull
+                                + pl->rng_carry;
+    pl->rng_base  = rng_next&0xffffffff;
+    pl->rng_carry = rng_next>>32;
+}
+
 static void do_frame()
 {
+    char data[MAX_PLAYERS*(MOVE_BACKLOG + 1)], *ptr = data;
+
     if (g_num_clients == 0) return;
 
     if ( (g_num_alive == 0 && g_deadline == -1) ||
@@ -1016,47 +1002,65 @@ static void do_frame()
 
     if (g_num_players == 0) return;
 
-    /* Kill out-of-sync players */
+    /* Process player moves */
     for (int n = 0; n < g_num_players; ++n)
     {
         Player *pl = g_players[n];
-        if (pl->dead_since != -1) continue;
+        bool just_died = pl->dead_since == pl->timestamp;
 
-        int backlog = g_timestamp - g_players[n]->timestamp;
-        assert(backlog >= 0);
-        if (backlog >= MOVE_SYNCLOG)
+        if (pl->dead_since == -1)  /* player alive? */
         {
-            message("Killed %s: client out-of-sync!", g_players[n]->name);
-            player_kill(pl);
+            int pos;
+            for ( pos = 0; pl->timestamp < g_timestamp &&
+                           pos < pl->moves_queue_len; ++pos )
+            {
+                Move m = pl->moves_queue[pos];
+                *ptr++ = (char)pl->index;
+                *ptr++ = (char)m;
+                do_player_move(pl, m);
+                if (pl->dead_since >= 0)
+                {
+                    just_died = true;
+                    break;
+                }
+            }
+
+            if (pos > 0)
+            {
+                /* Move remaining moves to the front of the queue: */
+                pl->moves_queue_len -= pos;
+                if (pl->moves_queue_len > 0)
+                {
+                    memmove( pl->moves_queue, pl->moves_queue + pos,
+                            sizeof(*pl->moves_queue)*pl->moves_queue_len );
+                }
+            }
+            else
+            if (g_timestamp - g_players[n]->timestamp > MOVE_BACKLOG)
+            {
+                /* Check if player is out of sync: */
+                message("Killed %s: client out-of-sync!", g_players[n]->name);
+                player_kill(pl);
+                just_died = true;
+            }
+        }
+
+        if (just_died)
+        {
+            *ptr++ = (char)pl->index;
+            *ptr++ = (char)MOVE_DEAD;
+        }
+
+        if (pl->dead_since >= 0)
+        {
+            pl->timestamp = g_timestamp;  /* implicitely up-to-date */
+            pl->moves_queue_len = 0;      /* discard queued moves */
         }
     }
 
-    /* Send moves packet to all clients  */
+    /* Broadcast moves packet */
     packet_begin(MUSC_MOVE);
-    packet_write_byte((g_gameid >> 24)&255);
-    packet_write_byte((g_gameid >> 16)&255);
-    packet_write_byte((g_gameid >>  8)&255);
-    packet_write_byte((g_gameid >>  0)&255);
-    packet_write_byte((g_timestamp >> 24)&255);
-    packet_write_byte((g_timestamp >> 16)&255);
-    packet_write_byte((g_timestamp >>  8)&255);
-    packet_write_byte((g_timestamp >>  0)&255);
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        bool dead = g_players[n]->dead_since != -1 &&
-                    g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG;
-        packet_write_byte(!dead);
-    }
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        bool dead = g_players[n]->dead_since != -1 &&
-                    g_timestamp - g_players[n]->dead_since >= MOVE_BACKLOG;
-        if (dead) continue;
-        int backlog = g_timestamp - g_players[n]->timestamp;
-        if (backlog > MOVE_BACKLOG) backlog = MOVE_BACKLOG;
-        packet_write(g_players[n]->moves + backlog, MOVE_BACKLOG - backlog);
-        while (backlog-- > 0) packet_write_byte(0);
-    }
+    packet_write(data, ptr - data);
     packet_end();
     packet_broadcast(false);
 }
@@ -1068,9 +1072,9 @@ static double process_frames()
     do {
         /* Compute time to next tick */
         double delay = g_time_start + (double)(g_timestamp + 1)/SERVER_FPS -
-		       time_now();
+            time_now();
         if (delay > 0) return delay;
-        g_timestamp += 1;
+        ++g_timestamp;
         do_frame();
     } while (g_num_players > 0);
     return 1.0;
