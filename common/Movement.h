@@ -17,12 +17,12 @@ typedef struct Position
 
 /* Updates the position with the given move.
 
-   If move is not one of MOVE_TURN_LEFT, MOVE_TURN_RIGHT or MOVE_FORWARD,
+   If `move' is not one of MOVE_TURN_LEFT, MOVE_TURN_RIGHT or MOVE_FORWARD,
    false is returned and the position is not changed.
 
-   Otherwise, if move is MOVE_TURN_LEFT or MOVE_TURN_RIGHT, the angle is
-   incremented or decremented by turn_rate (respectively); afterwards, the
-   position is moved forward by move_rate, and true is returned.
+   Otherwise, the player is moved along an arc with angle `turn_rate' and
+   length `move_rate' if `move' is MOVE_TURN_LEFT or MOVE_TURN_RIGHT, or
+   a straight line segment of length `move_rate' if `move' is MOVE_FORWARD.
 */
 bool position_update( Position *position, Move move,
                       double move_rate, double turn_rate );

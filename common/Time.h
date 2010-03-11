@@ -5,7 +5,6 @@
 extern "C" {
 #endif
 
-
 void time_reset();
 double time_now();
 
