@@ -408,13 +408,14 @@ static void player_kill(Player *pl)
     pl->dead_since = pl->timestamp;
     --g_num_alive;
 
-    if (g_timestamp >= WARMUP)
+    if (pl->timestamp >= WARMUP)
     {
         if (g_num_alive <= 1 && g_deadline == -1)
         {
             /* End the game after a fixed number of seconds */
-            g_deadline = g_timestamp + VICTORY_TIME;
+            g_deadline = pl->timestamp + VICTORY_TIME;
         }
+
         /* Give remaining players a point.
            NB. if two players die in the same turn, they both get a point from
            each other's death. */
