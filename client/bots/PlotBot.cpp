@@ -69,7 +69,7 @@ private:
 class PlotBot : public PlayerController
 {
 public:
-    PlotBot() : window(new Window("Plot Demo"))
+    PlotBot() : window(new Window("Plot Demo")), th(0)
     {
         window->show();
     }
@@ -81,7 +81,7 @@ public:
 
     void restart(const GameParameters &gp)
     {
-        (void)gp;  // unused
+        th = FIELD_SIZE*gp.line_width;
         window->clear();
     }
 
@@ -107,7 +107,6 @@ public:
 
         if ((p.x != q.x || p.y != q.y) && solid)
         {
-            const float th = LINE_WIDTH;
             float dx1 = -sin(p.a), dy1 = cos(p.a);
             float dx2 = -sin(q.a), dy2 = cos(q.a);
 
@@ -128,6 +127,7 @@ public:
 
 private:
     Window *window;
+    float th;
 };
 
 /* This function is called to created instances of our bot class. */
