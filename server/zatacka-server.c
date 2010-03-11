@@ -810,9 +810,10 @@ static void restart_game()
             /* Write header */
             fprintf( fp_replay, "%d %u %d\n",
                      1, g_gameid, g_num_players );
-            fprintf( fp_replay, "%d %d %d %d %d %d %d %d\n",
-                     SERVER_FPS, TURN_RATE, MOVE_RATE, WARMUP, HOLE_PROBABILITY,
-                     HOLE_LENGTH_MIN, HOLE_LENGTH_MAX, HOLE_COOLDOWN );
+            fprintf( fp_replay, "%d %d %d %d %d %d %d %d %d\n",
+                     SERVER_FPS, TURN_RATE, MOVE_RATE, LINE_WIDTH, WARMUP,
+                     HOLE_PROBABILITY, HOLE_LENGTH_MIN, HOLE_LENGTH_MAX,
+                     HOLE_COOLDOWN );
 
             for (int n = 0; n < g_num_players; ++n)
             {

@@ -9,6 +9,7 @@ Line 2:
     integer: data rate (frames per second)
     integer: turn rate
     integer: move rate
+    integer: line width
     integer: warm-up time
     integer: inverse hole probability
     integer: minimum hole size (inclusive)
