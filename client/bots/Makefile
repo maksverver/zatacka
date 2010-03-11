@@ -1,4 +1,5 @@
-include ../../base.mk
+TOP=../..
+include $(TOP)/base.mk
 
 CXXFLAGS+=-I../.. `$(FLTKCONFIG) --cxxflags`
 LDFLAGS+=-fPIC -Wl,--as-needed `$(FLTKCONFIG) --ldflags`

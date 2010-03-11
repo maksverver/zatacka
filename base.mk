@@ -1,3 +1,5 @@
+-include $(TOP)/local.mk
+
 CC?=gcc
 CFLAGS+=-g -Wall -Wextra -O2 -fPIC
 CXX?=g++
@@ -7,4 +9,4 @@ LDLIBS+=-lm
 
 # For the client:
 FLTKCONFIG?=fltk-config
-#LIBMIKMODCFG?=libmikmod-config  # optional
+# optional: LIBMIKMODCONFIG?=libmikmod-config
