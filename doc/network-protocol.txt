@@ -71,14 +71,25 @@ Reliable packets: (server->client)
             1 byte   hole score
             1 bytes  reserved (0)
 
+   68 Fast-forward
+        For each player, a zero-terminated list of compressed moves.
+        A compressed move is of the format:
+            highest 2 bits:
+                0:  move straight ahead
+                1:  turn left
+                2:  turn right
+                3:  player died
+            lowest 6 bits:
+                repeat count between 1 and 63 (inclusive)
+
 Unreliable packets: (client->server)
  128 Moves
 
     For each player controlled by this client:
         1 byte: move:
-                1: move straight ahead
-                2: turn left
-                3: turn right
+                0: move straight ahead
+                1: turn left
+                2: turn right
 
 Unreliable packets: (server->client)
  192 Moves
@@ -86,7 +97,7 @@ Unreliable packets: (server->client)
     For each move:
         1 byte: player index
         1 byte: move:
-                1: move straight ahead
-                2: turn left
-                3: turn right
-                4: player died
+                0: move straight ahead
+                1: turn left
+                2: turn right
+                3: player died

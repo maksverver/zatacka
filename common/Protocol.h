@@ -24,15 +24,13 @@ typedef enum Message
     MUSC_MOVE = 192
 } Message;
 
-/* Move commands.
-   MOVE_NONE and MOVE_DEAD are only sent by the server.*/
+/* Player movement commands. */
 typedef enum Move
 {
-    MOVE_NONE       = 0,
-    MOVE_FORWARD    = 1,
-    MOVE_TURN_LEFT  = 2,
-    MOVE_TURN_RIGHT = 3,
-    MOVE_DEAD       = 4
+    MOVE_FORWARD    = 0,
+    MOVE_TURN_LEFT  = 1,
+    MOVE_TURN_RIGHT = 2,
+    MOVE_DEAD       = 3
 } Move;
 
 /* Player flags. Set in HELO message. */

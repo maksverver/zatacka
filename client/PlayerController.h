@@ -31,8 +31,8 @@ public:
        `messages` is a list of chat messages received; first element is the
        client name (empty for server messages), second is the message string.
 
-       Implementation should return a valid move (not MOVE_NONE or MOVE_DEAD),
-       and may call say() to broadcast chat messages.
+       Implementation should return a valid move (not MOVE_DEAD), and may call
+       say() to broadcast chat messages.
     */
     virtual Move move( int timestamp, const Player *players,
                        int player_index, const Field &field ) = 0;

@@ -323,7 +323,8 @@ static void player_move(int n, Move move)
     }
 
     /* Display sprite during warmup after first move */
-    if ((move == 2 || move == 3) && (pl.timestamp < g_gp.warmup))
+    if ( (move == MOVE_TURN_LEFT || move == MOVE_TURN_RIGHT) &&
+         (pl.timestamp < g_gp.warmup) )
     {
         g_window->gameView()->setSpriteType(n, Sprite::ARROW);
         g_window->gameView()->setSpriteLabel(n, g_players[n].name);
@@ -341,10 +342,6 @@ static void player_move(int n, Move move)
 
     switch (move)
     {
-    case MOVE_NONE:
-        fatal("MOVE_NONE passed to player_move!");
-        return;
-
     default:
         error("invalid move (%d) interpreted as MOVE_FORWARD", (int)move);
         move = MOVE_FORWARD;
@@ -486,10 +483,13 @@ static void handle_MOVE(unsigned char *buf, size_t len)
     /* Update moves */
     for (size_t pos = 1; pos < len; pos += 2)
     {
-        unsigned n = buf[pos], m = buf[pos + 1];
-        if (n >= g_players.size() || m < 1 || m > 4) continue;
-        player_move(n, (Move)m);
-        if (g_my_indices[n] == -1) player_reset_prediction(n);
+        size_t n = buf[pos];
+        int m = buf[pos + 1];
+        if (n < g_players.size() && m >= MOVE_FORWARD && m <= MOVE_DEAD)
+        {
+            player_move(n, (Move)m);
+            if (g_my_indices[n] == -1) player_reset_prediction(n);
+        }
     }
 
     update_sprites();

@@ -17,6 +17,9 @@ endif
 default: zatacka
 	make -C bots
 
+all: default
+	make -C bots all
+
 clean:
 	rm -f $(OBJS)
 	make -C bots clean
@@ -28,4 +31,4 @@ distclean: clean
 zatacka: $(OBJS) ../common/common.a
 	$(CXX) -o zatacka $(OBJS) $(LDFLAGS) $(LDLIBS)
 
-.PHONY: all clean distclean
+.PHONY: default all clean distclean

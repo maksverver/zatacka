@@ -19,4 +19,4 @@ clean:
 distclean: clean
 	rm -f *.so
 
-.PHONY: all clean distclean
+.PHONY: default all clean distclean

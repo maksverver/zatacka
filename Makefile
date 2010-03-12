@@ -4,6 +4,11 @@ default:
 	make -C client
 	make -C server
 
+all:
+	make -C common all
+	make -C client all
+	make -C server all
+
 clean:
 	make -C common clean
 	make -C client clean
@@ -14,4 +19,4 @@ distclean: clean
 	make -C client distclean
 	make -C server distclean
 
-.PHONY: all clean distclean
+.PHONY: default all clean distclean

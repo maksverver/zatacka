@@ -45,7 +45,7 @@ typedef int socklen_t;
 #define MAX_CLIENTS           (64)
 #define SERVER_FPS            (30)
 #define MOVE_BACKLOG          (60)
-#define MAX_PACKET_LEN      (4094)
+#define MAX_PACKET_LEN     (16384)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
 #define TURN_RATE             (48)
@@ -577,7 +577,7 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     {
         Player *pl = &cl->players[p];
         int m = buf[1 + p];
-        if (m < 1 || m > 4)
+        if (m < MOVE_FORWARD || m > MOVE_DEAD)
         {
             error("(MOVE) received invalid move %d", m);
             player_kill(pl);
