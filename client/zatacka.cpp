@@ -32,8 +32,8 @@ ClientSocket *g_cs;     /* client connection to the server */
 GameParameters g_gp;    /* game parameters */
 
 int g_server_timestamp;   /* last timestamp received */
-int g_local_timestamp;  /* local estimated timestamp */
-double g_server_time;   /* estimated server time at timestamp 0 */
+int g_local_timestamp;    /* local estimated timestamp */
+double g_server_time;     /* estimated server time at timestamp 0 */
 
 std::vector<std::string> g_my_names;    /* my player names */
 std::vector<int>         g_my_players;  /* indices of my players in g_players */
@@ -409,6 +409,23 @@ static void player_move(int n, Move move)
 static void forward_to(int timestamp)
 {
     const Field &field = g_window->gameView()->field();
+    bool have_players = false;
+
+    for (size_t n = 0; n < g_my_players.size(); ++n)
+    {
+        int p = g_my_players[n];
+        if (p >= 0 && !g_players[p].dead)
+        {
+            have_players = true;
+            break;
+        }
+    }
+
+    if (!have_players)
+    {
+        g_local_timestamp = timestamp;
+        return;
+    }
 
     while (g_local_timestamp < timestamp)
     {
@@ -459,6 +476,54 @@ static void forward_to(int timestamp)
     }
 }
 
+static void handle_FFWD(unsigned char *buf, size_t len)
+{
+    if (len < 5 + (size_t)g_gp.num_players)
+    {
+        error( "(FFWD) invalid packet length (%d) for %d players",
+               len, g_gp.num_players );
+        return;
+    }
+
+    /* Decode server timestamp */
+    int timestamp = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
+    if (timestamp < 0)
+    {
+        error("(FFWD) invalid timestamp (%d)", timestamp);
+        return;
+    }
+    g_local_timestamp = g_server_timestamp = timestamp;
+    g_server_time = time_now() - 1.0*g_server_timestamp/g_gp.data_rate;
+
+    /* Decode compressed player moves */
+    size_t pos = 5;
+    for (int n = 0; n < g_gp.num_players; ++n)
+    {
+        size_t end = pos;
+        while (end < len && buf[end] != 0) ++end;
+        if (end >= len)
+        {
+            error("(FFWD) unterminated move data");
+            break;
+        }
+        for ( ; pos < end; ++pos)
+        {
+            int m = buf[pos] >> 6, r = buf[pos]&0x3f;
+            if (m < MOVE_FORWARD || m > MOVE_DEAD || r < 1)
+            {
+                error("(FFWD) invalid compressed move (%d)", (int)buf[pos]);
+            }
+            else
+            {
+                do player_move(n, (Move)m); while (--r > 0);
+            }
+        }
+        player_reset_prediction(n);
+        pos = end + 1;
+    }
+    update_sprites();
+}
+
 static void handle_MOVE(unsigned char *buf, size_t len)
 {
     if (len%2 != 1)
@@ -485,7 +550,16 @@ static void handle_MOVE(unsigned char *buf, size_t len)
     {
         size_t n = buf[pos];
         int m = buf[pos + 1];
-        if (n < g_players.size() && m >= MOVE_FORWARD && m <= MOVE_DEAD)
+        if (n >= g_players.size())
+        {
+            error("(MOVE) invalid player index (%ld)", (long)n);
+        }
+        else
+        if (m < MOVE_FORWARD && m > MOVE_DEAD)
+        {
+            error("(MOVE) invalid move number (%d)", (int)m);
+        }
+        else
         {
             player_move(n, (Move)m);
             if (g_my_indices[n] == -1) player_reset_prediction(n);
@@ -507,6 +581,7 @@ static void handle_packet(unsigned char *buf, size_t len)
     case MRSC_DISC: return handle_DISC(buf, len);
     case MRSC_STRT: return handle_STRT(buf, len);
     case MRSC_SCOR: return handle_SCOR(buf, len);
+    case MRSC_FFWD: return handle_FFWD(buf, len);
     case MUSC_MOVE: return handle_MOVE(buf, len);
     default: error("invalid message type");
     }

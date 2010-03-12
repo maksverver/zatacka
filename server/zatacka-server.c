@@ -56,6 +56,7 @@ typedef int socklen_t;
 #define HOLE_LENGTH_MIN        (3)
 #define HOLE_LENGTH_MAX        (8)
 #define HOLE_COOLDOWN         (10)
+#define MAX_FF_LEN         (10000)
 
 #define VICTORY_TIME        (3*SERVER_FPS)
 #define WARMUP              (3*SERVER_FPS)
@@ -103,17 +104,21 @@ typedef struct Player
        (used to determine random state transitions) */
     unsigned        rng_base;       /* base (current) value */
     unsigned        rng_carry;      /* last carry value */
+
+    /* Fast-forward state */
+    unsigned char   ff_buf[MAX_FF_LEN];    /* movement data buffer */
+    int             ff_len;                /* movement data length */
 } Player;
 
 
 typedef struct Client
 {
-    /* Set to true only if this client is currently in use */
-    bool            in_use;
-    bool            hailed;        /* have we received a HELO? */
-    bool            started;       /* game start acknowledged? */
-    int             protocol;      /* protocol version used by the client */
-    int             flags;         /* connection flags */
+    bool            in_use;         /* is client connected? */
+    bool            hailed;         /* have we received a HELO? */
+    bool            started;        /* game start acknowledged? */
+    bool            zombie;         /* active players on disconnect? */
+    int             protocol;       /* protocol version used by the client */
+    int             flags;          /* connection flags */
 
     /* Remote address (TCP only) */
     struct sockaddr_in sa_remote;
@@ -149,6 +154,9 @@ static unsigned char g_holes[FIELD_SIZE][FIELD_SIZE];
 static char packet_data_[MAX_PACKET_LEN + 2];     /* packet data buffer */
 static char *packet_buf = packet_data_ + 2;       /* packet payload */
 static size_t packet_len;                         /* size of packet payload */
+
+static char STRT_buf[MAX_PACKET_LEN];       /* last STRT packet issued */
+static size_t STRT_len;                     /* last STRT packet's length */
 
 #ifdef REPLAY
 static FILE *fp_replay;         /* Record replay to this file */
@@ -208,7 +216,7 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
 static void restart_game();
 
 /* Send scores to all clients */
-static void send_scores();
+static void send_scores(Client *cl);
 
 /* Process a server frame. */
 static void do_frame();
@@ -353,16 +361,18 @@ static void client_disconnect(Client *cl, const char *reason)
           ntohs(cl->sa_remote.sin_port), reason );
 
     /* Remove client -- it's important to do this first, because functions
-       call below may call disconnect again (i.e. if client_send() fails) */
+       call below may call disconnect again (i.e. if packet_send() fails) */
     cl->in_use = false;
     --g_num_clients;
 
-    /* Kill and deactivate all associated players */
+    /* Kill associated players */
     for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
     {
-        if (!cl->players[n].in_use) continue;
-        player_kill(&cl->players[n]);
-        cl->players[n].in_use = false;
+        if (cl->players[n].in_use && cl->players[n].index >= 0)
+        {
+            player_kill(&cl->players[n]);
+            cl->zombie = true;
+        }
     }
 
     /* Send quit packet containing reason to client */
@@ -418,12 +428,15 @@ static void player_kill(Player *pl)
 
         /* Give remaining players a point.
            NB. if two players die in the same turn, they both get a point from
-           each other's death. */
+           each other's death.
+           FIXME: current code isn't 100% correct when a player has lag...
+           FIXME: should g_timestamp really be pl->timestamp?
+        */
         for (int n = 0; n < g_num_players; ++n)
         {
-            if (g_players[n] == pl) continue;
-            if ( g_players[n]->dead_since == -1 ||
-                 g_players[n]->dead_since >= g_timestamp - (g_players[n] > pl) )
+            if ( g_players[n] != pl && ( g_players[n]->dead_since == -1 ||
+                 g_players[n]->dead_since >=
+                     g_timestamp - (g_players[n] > pl ? 1 : 0) ) )
             {
                 g_players[n]->score_total += 1;
                 g_players[n]->score_moving_sum += 1;
@@ -431,7 +444,7 @@ static void player_kill(Player *pl)
             }
         }
 
-        send_scores();
+        send_scores(NULL);
     }
 }
 
@@ -524,6 +537,7 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         {
             client_disconnect(cl, "(HELO) player name may not start or "
                                   "end with space");
+            return;
         }
         pl->name[L] = '\0';
 
@@ -550,11 +564,41 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
 
         /* Enable player */
         pl->in_use = true;
+        pl->index = -1;
     }
 
     if (pos < len)
     {
         cl->flags = buf[pos++]&CLFL_ALL;
+    }
+
+    /* Bring player up-to-date. */
+    if (g_num_players > 0)
+    {
+        /* Re-send STRT packet: */
+        packet_begin(STRT_buf[0]);
+        packet_write(STRT_buf + 1, STRT_len - 1);
+        packet_end();
+        packet_send(cl, true);
+
+        /* Send fast-forward packet */
+        packet_begin(MRSC_FFWD);
+        packet_write_byte(g_timestamp >> 24);
+        packet_write_byte(g_timestamp >> 16);
+        packet_write_byte(g_timestamp >>  8);
+        packet_write_byte(g_timestamp >>  0);
+        for (int n = 0; n < g_num_players; ++n)
+        {
+            const Player *pl = g_players[n];
+            packet_write((char*)pl->ff_buf, pl->ff_len);
+            if (pl->dead_since >= 0) packet_write_byte((MOVE_DEAD<<6) + 1);
+            packet_write_byte(0);
+        }
+        packet_end();
+        packet_send(cl, true);
+
+        /* Send current scores */
+        send_scores(cl);
     }
 }
 
@@ -672,8 +716,9 @@ static void restart_game()
     g_timestamp = 0;
     g_deadline = -1;
 
+    for (int n = 0; n < MAX_CLIENTS; ++n) g_clients[n].zombie = false;
+
     if (g_num_clients == 0) return;
-    if (g_num_players > 0)
 
 #ifdef BMP
     if (g_gameid != 0)
@@ -757,6 +802,7 @@ static void restart_game()
         pl->cross_holeid    = 0;
         pl->rng_base        = g_gameid ^ n;
         pl->rng_carry       = 0;
+        pl->ff_len          = 0;
     }
 
     /* Intialize clients */
@@ -878,6 +924,10 @@ static void restart_game()
     }
     packet_end();
 
+    /* Copy STRT packet so we can send it to clients that join later */
+    memcpy(STRT_buf, packet_buf, packet_len);
+    STRT_len = packet_len;
+
     /* Convert positions to more practical format */
     for (int i = 0; i < g_num_players; ++i)
     {
@@ -889,10 +939,10 @@ static void restart_game()
 
     /* Send start packet to all clients */
     packet_broadcast(true);
-    send_scores();
+    send_scores(NULL);
 }
 
-static void send_scores()
+static void send_scores(Client *cl)
 {
     packet_begin(MRSC_SCOR);
     for (int n = 0; n < g_num_players; ++n)
@@ -913,7 +963,10 @@ static void send_scores()
         packet_write_byte(0);
     }
     packet_end();
-    packet_broadcast(true);
+    if (cl == NULL)
+        packet_broadcast(true);
+    else
+        packet_send(cl, true);
 }
 
 /* Executes one move for the given player and updates his timestamp: */
@@ -973,7 +1026,7 @@ static void do_player_move(Player *pl, Move m)
             if (pl->cross_holeid != 0)
             {
                 pl->score_holes += 1;
-                send_scores();
+                send_scores(NULL);
             }
             pl->cross_holeid = holeid;
         }
@@ -996,6 +1049,19 @@ static void do_player_move(Player *pl, Move m)
                                 + pl->rng_carry;
     pl->rng_base  = rng_next&0xffffffff;
     pl->rng_carry = rng_next>>32;
+
+    /* Add to fast-forward data buffer: */
+    if ( pl->ff_len > 0 &&
+         (pl->ff_buf[pl->ff_len - 1]&0xc0) == (m << 6) &&
+         (pl->ff_buf[pl->ff_len - 1]&0x3f) < 0x3f )
+    {
+        pl->ff_buf[pl->ff_len - 1] += 1;  /* increase current repeat count */
+    }
+    else
+    if (pl->ff_len < MAX_FF_LEN)
+    {
+        pl->ff_buf[pl->ff_len++] = (m << 6) + 1;  /* start new command */
+    }
 }
 
 static void do_frame()
@@ -1016,6 +1082,7 @@ static void do_frame()
     for (int n = 0; n < g_num_players; ++n)
     {
         Player *pl = g_players[n];
+
         bool just_died = pl->dead_since == pl->timestamp;
 
         if (pl->dead_since == -1)  /* player alive? */
@@ -1181,7 +1248,8 @@ static int run()
 #endif
 
                 int n = 0;
-                while (n < MAX_CLIENTS && g_clients[n].in_use) ++n;
+                while ( n < MAX_CLIENTS &&
+                        (g_clients[n].in_use || g_clients[n].zombie) ) ++n;
                 if (n == MAX_CLIENTS)
                 {
                     warn( "No client slot free; rejecting connection from %s:%d",

@@ -72,6 +72,8 @@ Reliable packets: (server->client)
             1 bytes  reserved (0)
 
    68 Fast-forward
+        4 bytes:    server timestamp
+
         For each player, a zero-terminated list of compressed moves.
         A compressed move is of the format:
             highest 2 bits:

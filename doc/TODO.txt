@@ -1,7 +1,12 @@
 Updates which would invalidate the protocol:
  - Add unreliable protocol back in (if this has demonstrable advantages?)
    (See outline in new-network-protocol.txt)
- - Support viewing the game-in-progress when a client joins.
+ - Maybe: allow Unicode names?
+
+FIXME:
+ - when the server quits, the client is killed (with SIG_PIPE I assume).
+   fix this in ClientSocket by passing no-signal-flag to recv() and send()
+   (beware: Win32 probably doesn't support that)
 
 1.0:
  - name & branding

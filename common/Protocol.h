@@ -16,6 +16,7 @@ typedef enum Message
     MRSC_DISC =  65,
     MRSC_STRT =  66,
     MRSC_SCOR =  67,
+    MRSC_FFWD =  68,
 
     /* unreliable client->server */
     MUCS_MOVE = 128,
