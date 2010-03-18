@@ -113,14 +113,14 @@ public:
             const RGB &rgb = g_colors[player_index%NUM_COLORS];
             Quadrilateral quad = {
                 fl_rgb_color(rgb.r, rgb.g, rgb.b),
-                { { FIELD_SIZE*p.x + 0.5f - 0.5f*th*dx1,
-                    FIELD_SIZE*p.y + 0.5f - 0.5f*th*dy1 },
-                  { FIELD_SIZE*p.x + 0.5f + 0.5f*th*dx1,
-                    FIELD_SIZE*p.y + 0.5f + 0.5f*th*dy1 },
-                  { FIELD_SIZE*q.x + 0.5f + 0.5f*th*dx2,
-                    FIELD_SIZE*q.y + 0.5f + 0.5f*th*dy2 },
-                  { FIELD_SIZE*q.x + 0.5f - 0.5f*th*dx2,
-                    FIELD_SIZE*q.y + 0.5f - 0.5f*th*dy2 } } };
+                { { FIELD_SIZE*(float)p.x + 0.5f - 0.5f*th*dx1,
+                    FIELD_SIZE*(float)p.y + 0.5f - 0.5f*th*dy1 },
+                  { FIELD_SIZE*(float)p.x + 0.5f + 0.5f*th*dx1,
+                    FIELD_SIZE*(float)p.y + 0.5f + 0.5f*th*dy1 },
+                  { FIELD_SIZE*(float)q.x + 0.5f + 0.5f*th*dx2,
+                    FIELD_SIZE*(float)q.y + 0.5f + 0.5f*th*dy2 },
+                  { FIELD_SIZE*(float)q.x + 0.5f - 0.5f*th*dx2,
+                    FIELD_SIZE*(float)q.y + 0.5f - 0.5f*th*dy2 } } };
             window->add(quad);
         }
     }
