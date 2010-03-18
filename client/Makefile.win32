@@ -3,7 +3,7 @@ include Makefile
 LDLIBS+=-lws2_32 -Wl,--subsystem,windows
 
 default: zatacka
-	make -C bots -f Makefile.win32
+	$(MAKE) -C bots -f Makefile.win32
 
 all: default
-	make -C bots -f Makefile.win32 all
+	$(MAKE) -C bots -f Makefile.win32 all

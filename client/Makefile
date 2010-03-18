@@ -15,18 +15,18 @@ LDLIBS+=`$(LIBMIKMODCONFIG) --libs`
 endif
 
 default: zatacka
-	make -C bots
+	$(MAKE) -C bots
 
 all: default
-	make -C bots all
+	$(MAKE) -C bots all
 
 clean:
 	rm -f $(OBJS)
-	make -C bots clean
+	$(MAKE) -C bots clean
 
 distclean: clean
 	rm -f zatacka
-	make -C bots distclean
+	$(MAKE) -C bots distclean
 
 zatacka: $(OBJS) ../common/common.a
 	$(CXX) $(LDFLAGS) -o zatacka $(OBJS) $(LDLIBS)
