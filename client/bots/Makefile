@@ -2,7 +2,8 @@ TOP=../..
 include $(TOP)/base.mk
 
 CXXFLAGS+=-I../.. `$(FLTKCONFIG) --cxxflags`
-LDFLAGS+=-fPIC -Wl,--as-needed `$(FLTKCONFIG) --ldflags`
+LDFLAGS+=-fPIC -Wl,--as-needed
+LDLIBS+=`$(FLTKCONFIG) --ldflags`
 
 default: DemoBot.so Tipsy.so Twirly.so
 
@@ -12,7 +13,7 @@ SimpleSearch.a: SimpleSearch.o
 	$(AR) rcs $@ $^
 
 %.so: %.o SimpleSearch.a ../../common/common.a
-	$(CXX) $(LDFLAGS) -shared $^ -o $@
+	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
 clean:
 	rm -f *.o *.a
 

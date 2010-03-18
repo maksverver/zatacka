@@ -1,6 +1,7 @@
 include Makefile
 
 default: DemoBot.dll Tipsy.dll Twirly.dll
+all: default DemoBotWin.dll Hybrid.dll PlotBot.dll
 
 %.dll: %.so
 	cp "$<" "$@"

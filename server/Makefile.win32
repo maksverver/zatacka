@@ -3,7 +3,4 @@ LDLIBS=-lws2_32
 
 include Makefile
 
-all: zatacka-server.exe
-
-zatacka-server.exe: zatacka-server
-	cp zatacka-server zatacka-server.exe
+all: zatacka-server

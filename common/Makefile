@@ -1,4 +1,5 @@
-include ../base.mk
+TOP=..
+include $(TOP)/base.mk
 
 OBJS=BMP.o Colors.o Debug.o Field.o Movement.o Time.o
 

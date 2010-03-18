@@ -2,7 +2,7 @@ TOP=..
 include $(TOP)/base.mk
 
 CXXFLAGS+=`$(FLTKCONFIG) --cxxflags` -I..
-LDFLAGS+=`$(FLTKCONFIG) --ldflags`
+LDLIBS+=`$(FLTKCONFIG) --ldflags`
 LDLIBS+=../common/common.a
 OBJS=	ClientSocket.o Config.o GameModel.o GameView.o KeyWindow.o \
 	KeyboardPlayerController.o MainWindow.o MainGameView.o \
@@ -29,6 +29,6 @@ distclean: clean
 	make -C bots distclean
 
 zatacka: $(OBJS) ../common/common.a
-	$(CXX) -o zatacka $(OBJS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o zatacka $(OBJS) $(LDLIBS)
 
 .PHONY: default all clean distclean
