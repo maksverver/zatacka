@@ -1,0 +1,2 @@
+MAKEFLAGS=-f Makefile.win32
+include Makefile

@@ -5,3 +5,6 @@ all: default DemoBotWin.dll Hybrid.dll PlotBot.dll
 
 %.dll: %.so
 	cp "$<" "$@"
+
+distclean: clean
+	rm -f *.so *.dll

@@ -1,22 +1,22 @@
 
 default:
-	make -C common
-	make -C client
-	make -C server
+	make $(MAKEFLAGS) -C common
+	make $(MAKEFLAGS) -C client
+	make $(MAKEFLAGS) -C server
 
 all:
-	make -C common all
-	make -C client all
-	make -C server all
+	make $(MAKEFLAGS) -C common all
+	make $(MAKEFLAGS) -C client all
+	make $(MAKEFLAGS) -C server all
 
 clean:
-	make -C common clean
-	make -C client clean
-	make -C server clean
+	make $(MAKEFLAGS) -C common clean
+	make $(MAKEFLAGS) -C client clean
+	make $(MAKEFLAGS) -C server clean
 	
 distclean: clean
-	make -C common distclean
-	make -C client distclean
-	make -C server distclean
+	make $(MAKEFLAGS) -C common distclean
+	make $(MAKEFLAGS) -C client distclean
+	make $(MAKEFLAGS) -C server distclean
 
 .PHONY: default all clean distclean
