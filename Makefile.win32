@@ -1,2 +1,2 @@
-MAKEFLAGS=-f Makefile.win32
+XMAKEFLAGS=-f Makefile.win32
 include Makefile
