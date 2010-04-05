@@ -1,7 +1,16 @@
 Updates which would invalidate the protocol:
+ - Enable optional use of TCP_NODELAY socket option, on both client and server,
+   and enable it by default.
+ - Implement auto-negation of TCP_NODELAY flag; it should only be enabled when
+   both client and server agree its a good idea (because it causes increased
+   data traffic for both parties).
+
+ => then, rebuild next beta version! 
+
+MAYBE:
  - Add unreliable protocol back in (if this has demonstrable advantages?)
    (See outline in new-network-protocol.txt)
- - Maybe: allow Unicode names?
+ - Allow Unicode names => build RC
 
 FIXME:
  - when the server quits, the client is killed (with SIG_PIPE I assume).
