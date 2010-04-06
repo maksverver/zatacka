@@ -1,4 +1,5 @@
-Test TCP_NODELAY stuff on Windows, then release next beta. 
+client:
+ - enabling Nagle's algorithm should be a config option (default off)
 
 FIXME:
  - when the server quits, the client is killed (with SIG_PIPE I assume).
