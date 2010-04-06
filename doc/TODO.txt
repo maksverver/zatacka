@@ -1,16 +1,4 @@
-Updates which would invalidate the protocol:
- - Enable optional use of TCP_NODELAY socket option, on both client and server,
-   and enable it by default.
- - Implement auto-negation of TCP_NODELAY flag; it should only be enabled when
-   both client and server agree its a good idea (because it causes increased
-   data traffic for both parties).
-
- => then, rebuild next beta version! 
-
-MAYBE:
- - Add unreliable protocol back in (if this has demonstrable advantages?)
-   (See outline in new-network-protocol.txt)
- - Allow Unicode names => build RC
+Test TCP_NODELAY stuff on Windows, then release next beta. 
 
 FIXME:
  - when the server quits, the client is killed (with SIG_PIPE I assume).
@@ -19,11 +7,14 @@ FIXME:
 
 1.0:
  - name & branding
+ - maybe allow Unicode names
 
 1.1:
  - SERVER: option to block AI players
  - SERVER: configurable game parameters
  - SERVER: game console (view/change parameters, kick players, etc.)
+ - maybe add unreliable protocol back in (if this has demonstrable advantages?)
+   (See outline in new-network-protocol.txt)
 
 General:
  - clean up code, and make naming conventions (of classes, variables,

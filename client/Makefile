@@ -6,7 +6,7 @@ LDLIBS+=`$(FLTKCONFIG) --ldflags`
 LDLIBS+=../common/common.a
 OBJS=	ClientSocket.o Config.o GameModel.o GameView.o KeyWindow.o \
 	KeyboardPlayerController.o MainWindow.o MainGameView.o \
-	ScoreView.o zatacka.o
+	PlayerController.o ScoreView.o zatacka.o
 
 ifdef LIBMIKMODCONFIG
 OBJS+=Audio.o

@@ -9,6 +9,10 @@
 class PlayerController
 {
 public:
+    /* Attempts to load a bot using the given name as a filename hint: */
+    static PlayerController *load_bot(const char *name);
+
+public:
     PlayerController(bool human = false) : m_human(human) { };
     virtual ~PlayerController() { };
 

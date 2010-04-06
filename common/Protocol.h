@@ -6,23 +6,27 @@
 typedef enum Message
 {
     /* reliable client->server */
-    MRCS_HELO =   0,
+    MRCS_FEAT =   0,
     MRCS_QUIT =   1,
-    MRCS_CHAT =   2,
-    MRCS_STRT =   3,
+    MRCS_JOIN =   2,
+    MRCS_CHAT =   3,
+    MRCS_STRT =   4,
+    MRCS_MOVE =   5,
 
     /* reliable server->client */
-    MRSC_MESG =  64,
-    MRSC_DISC =  65,
-    MRSC_STRT =  66,
-    MRSC_SCOR =  67,
-    MRSC_FFWD =  68,
+    MRSC_FEAT =  64,
+    MRSC_QUIT =  65,
+    MRSC_CHAT =  66,
+    MRSC_STRT =  67,
+    MRSC_MOVE =  68,
+    MRSC_SCOR =  69,
+    MRSC_FFWD =  70
 
     /* unreliable client->server */
-    MUCS_MOVE = 128,
+    /* reserved range 128-191 */
 
     /* unreliable server->client */
-    MUSC_MOVE = 192
+    /* reserved range 192-255 */
 } Message;
 
 /* Player movement commands. */
@@ -34,14 +38,16 @@ typedef enum Move
     MOVE_DEAD       = 3
 } Move;
 
+/* Protocol features. Set in FEAT message. */
+#define FEAT_NONE           (0)
+#define FEAT_NODELAY        (1)
+#define FEAT_BOTS           (2)
+#define FEAT_UNRELIABLE     (4)
+#define FEAT_ALL            (7)
+
 /* Player flags. Set in HELO message. */
 #define PLFL_NONE   (0)
 #define PLFL_BOT    (1)
 #define PLFL_ALL    (1)
-
-/* Client connection flags. Set in HELO message. */
-#define CLFL_NONE           (0)
-#define CLFL_RELIABLE_ONLY  (1)
-#define CLFL_ALL            (1)
 
 #endif /* ndef PROTOCOL_H_INCLUDED */

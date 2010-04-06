@@ -110,20 +110,6 @@ ClientSocket::ClientSocket(const char *hostname, int port, bool reliable_only)
         return;
     }
 
-#ifdef NODELAY
-    {
-#ifdef WIN32
-        BOOL v = TRUE;
-#else
-        int v = 1;
-#endif
-        if (setsockopt(fd_stream, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v)) != 0)
-        {
-            warn("could not put TCP socket in undelayed mode");
-        }
-    }
-#endif /* def NODELAY */
-
     if (!reliable_only)
     {
         socklen_t len = sizeof(sa_local);
@@ -302,4 +288,15 @@ void ClientSocket::clear_stats()
     bytes_received   = 0;
     packets_sent     = 0;
     packets_received = 0;
+}
+
+bool ClientSocket::set_nodelay(bool nodelay)
+{
+#ifdef WIN32
+    BOOL v = nodelay ? TRUE : FALSE;
+#else
+    int v = nodelay ? 1 : 0;
+#endif
+    return setsockopt( fd_stream, IPPROTO_TCP, TCP_NODELAY,
+                       (char*)&v, sizeof(v) ) == 0;
 }

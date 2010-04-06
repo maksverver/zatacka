@@ -30,11 +30,15 @@ public:
     void write(void const *buf, size_t len, bool reliable);
     ssize_t read(void *buf, size_t len);
 
+    /* Functions to collect network traffic statistics: */
     void clear_stats();
     size_t get_bytes_sent() { return bytes_sent; }
     size_t get_bytes_received() { return bytes_received; }
     size_t get_packets_sent() { return packets_sent; }
     size_t get_packets_received() { return packets_received; }
+
+    /* Enables/disables nodelay mode (disables/enables Nagle's algorithm) */
+    bool set_nodelay(bool nodelay);
 
 protected:
     /* reads the next available packet from the stream buffer (if any) */

@@ -62,6 +62,8 @@ typedef int socklen_t;
 #define WARMUP              (3*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
+#define SERVER_FEATS        (FEAT_NODELAY|FEAT_BOTS)
+
 #ifdef REPLAY
 #ifndef REPLAYDIR
 #define REPLAYDIR           "replay"
@@ -114,11 +116,11 @@ typedef struct Player
 typedef struct Client
 {
     bool            in_use;         /* is client connected? */
-    bool            hailed;         /* have we received a HELO? */
+    bool            joined;         /* have we received a JOIN? */
     bool            started;        /* game start acknowledged? */
     bool            zombie;         /* active players on disconnect? */
     int             protocol;       /* protocol version used by the client */
-    int             flags;          /* connection flags */
+    int             feats;          /* protocol features used by client */
 
     /* Remote address (TCP only) */
     struct sockaddr_in sa_remote;
@@ -194,10 +196,10 @@ static int packet_vprintf(const char *fmt, va_list ap);
 static void packet_end();
 
 /* Send a packet to a client */
-static void packet_send(Client *cl, bool reliable);
+static void packet_send(Client *cl);
 
 /* Broadcast a packet to all connected clients */
-static void packet_broadcast(bool reliable);
+static void packet_broadcast();
 
 /* Kill a player */
 static void player_kill(Player *p);
@@ -206,11 +208,11 @@ static void player_kill(Player *p);
 static void message(const char *fmt, ...);
 
 /* Network handling */
-static void handle_packet( Client *cl,
-                           unsigned char *buf, size_t len, bool reliable );
-static void handle_HELO(Client *cl, unsigned char *buf, size_t len);
-static void handle_MOVE(Client *cl, unsigned char *buf, size_t len);
+static void handle_packet(Client *cl, unsigned char *buf, size_t len);
+static void handle_FEAT(Client *cl, unsigned char *buf, size_t len);
+static void handle_JOIN(Client *cl, unsigned char *buf, size_t len);
 static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
+static void handle_MOVE(Client *cl, unsigned char *buf, size_t len);
 
 /* Restart the game (called when all players have died) */
 static void restart_game();
@@ -274,6 +276,27 @@ static void packet_begin(int type)
     packet_buf[packet_len++] = type;
 }
 
+static bool socket_set_blocking(SOCKET fd, bool val)
+{
+    /* Note that we set FIONBIO (NON-blocking IO!) iff val is false! */
+#ifdef WIN32
+    unsigned long v = !val;
+#else
+    int v = !val;
+#endif
+    return ioctl(fd, FIONBIO, &v) == 0;
+}
+
+static bool socket_set_nodelay(SOCKET fd, bool val)
+{
+#ifdef WIN32
+    BOOL v = val ? TRUE : FALSE;
+#else
+    int v = val;
+#endif
+    return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&v, sizeof(v)) == 0;
+}
+
 static size_t packet_write_byte(int value)
 {
     if (packet_len < MAX_PACKET_LEN)
@@ -313,43 +336,40 @@ static void packet_end()
     packet_buf[-1] = (packet_len >> 0)&0xff;
 }
 
-static void packet_broadcast(bool reliable)
+static void packet_broadcast()
 {
     for (int n = 0; n < MAX_CLIENTS; ++n)
     {
         Client *cl = &g_clients[n];
         if (!cl->in_use) continue;
-        if (!reliable && !cl->hailed) continue;
-        packet_send(cl, reliable);
+        packet_send(cl);
     }
 }
 
-static void packet_send(Client *cl, bool reliable)
+static void packet_send(Client *cl)
 {
+    char *buf = packet_buf - 2;
+    ssize_t len = packet_len + 2;
+
     /* Verify that packet_end() has been called: */
-    assert(packet_buf[-1] || packet_buf[-2]);
+    assert(buf[0] || buf[1]);
 
-    if (reliable || (cl->flags & CLFL_RELIABLE_ONLY))
+    if (send(cl->fd_stream, buf, len, 0) != (ssize_t)len)
     {
-        char *buf = packet_buf - 2;
-        ssize_t len = packet_len + 2;
-        if (send(cl->fd_stream, buf, len, 0) != (ssize_t)len)
-        {
-            info("reliable send() failed");
+        info("reliable send() failed");
 
-            /* we must not provide a reason, to prevent an infinite send loop */
-            client_disconnect(cl, NULL);
-        }
+        /* we must not provide a reason, to prevent an infinite send loop */
+        client_disconnect(cl, NULL);
     }
-    else
+
+/*
+    if (sendto( g_fd_packet, packet_buf, packet_len, 0,
+                (struct sockaddr*)&cl->sa_remote,
+                sizeof(cl->sa_remote) ) != (ssize_t)packet_len)
     {
-        if (sendto( g_fd_packet, packet_buf, packet_len, 0,
-                    (struct sockaddr*)&cl->sa_remote,
-                    sizeof(cl->sa_remote) ) != (ssize_t)packet_len)
-        {
-            info("unreliable send() failed");
-        }
+        info("unreliable send() failed");
     }
+*/
 }
 
 static void client_disconnect(Client *cl, const char *reason)
@@ -378,10 +398,10 @@ static void client_disconnect(Client *cl, const char *reason)
     /* Send quit packet containing reason to client */
     if (reason != NULL)
     {
-        packet_begin(MRSC_DISC);
+        packet_begin(MRSC_QUIT);
         packet_write(reason, strlen(reason));
         packet_end();
-        packet_send(cl, true);
+        packet_send(cl);
     }
     close(cl->fd_stream);
 }
@@ -391,7 +411,7 @@ static void message(const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
 
-    packet_begin(MRSC_MESG);
+    packet_begin(MRSC_CHAT);
     packet_write_byte(0);
     packet_vprintf(fmt, ap);
     packet_end();
@@ -448,61 +468,89 @@ static void player_kill(Player *pl)
     }
 }
 
-static void handle_packet( Client *cl, unsigned char *buf, size_t len,
-                           bool reliable )
+static void handle_packet(Client *cl, unsigned char *buf, size_t len)
 {
-    (void)reliable; /* unused */
-
 /*
-    info( "%s packet type %d of length %d received from client #%d",
-          reliable ? "reliable" : "unreliable", (int)buf[0], len, c );
+    info( "packet type %d of length %d received from client #%d",
+           (int)buf[0], len, cl - g_clients);
     hex_dump(buf, len);
 */
 
     switch ((int)buf[0])
     {
-    case MRCS_HELO: return handle_HELO(cl, buf, len);
-    case MUCS_MOVE: return handle_MOVE(cl, buf, len);
-    case MRCS_CHAT: return handle_CHAT(cl, buf, len);
+    case MRCS_FEAT: return handle_FEAT(cl, buf, len);
     case MRCS_QUIT: return client_disconnect(cl, "client quit");
+    case MRCS_JOIN: return handle_JOIN(cl, buf, len);
+    case MRCS_CHAT: return handle_CHAT(cl, buf, len);
     case MRCS_STRT: cl->started = true; return;
+    case MRCS_MOVE: return handle_MOVE(cl, buf, len);
     default: client_disconnect(cl, "invalid packet type");
     }
 }
 
-static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
+static void handle_FEAT(Client *cl, unsigned char *buf, size_t len)
+{
+    if (len < 6)
+    {
+        client_disconnect(cl, "(FEAT) truncated packet");
+        return;
+    }
+
+    /* Remember client protocol version and requested feats: */
+    cl->protocol = buf[1];
+    if (cl->protocol != 3)
+    {
+        client_disconnect(cl, "(JOIN) unsupported protocol (expected 3)");
+        return;
+    }
+    cl->feats = buf[5] & SERVER_FEATS;
+
+    /*  Put socket in NODELAY mode if requested+supported: */
+    if (cl->feats & FEAT_NODELAY)
+    {
+        if (!socket_set_nodelay(cl->fd_stream, 1))
+        {
+            warn("could not put TCP socket in undelayed mode");
+        }
+    }
+
+    /* Send server feats to client: */
+    packet_begin(MRSC_FEAT);
+    packet_write_byte(3);
+    packet_write_byte(0);
+    packet_write_byte(0);
+    packet_write_byte(0);
+    packet_write_byte(SERVER_FEATS);
+    packet_end();
+    packet_send(cl);
+}
+
+static void handle_JOIN(Client *cl, unsigned char *buf, size_t len)
 {
     /* Check if players have already been registered */
-    if (cl->hailed) return;
-    cl->hailed = true;
-
-    if (len < 3)
+    if (cl->joined) return;
+    cl->joined = true;
+    if (len < 2)
     {
-        client_disconnect(cl, "(HELO) truncated packet");
-        return;
-    }
-    cl->protocol = buf[1];
-    if (cl->protocol != 2)
-    {
-        client_disconnect(cl, "(HELO) unsupported protocol (expected 2)");
+        client_disconnect(cl, "(JOIN) truncated packet");
         return;
     }
 
-    int P = buf[2];
+    int P = buf[1];
     if (P > PLAYERS_PER_CLIENT)
     {
-        client_disconnect(cl, "(HELO) invalid number of players");
+        client_disconnect(cl, "(JOIn) invalid number of players");
         return;
     }
 
-    size_t pos = 3;
+    size_t pos = 2;
     for (int p = 0; p < P; ++p)
     {
         Player *pl = &cl->players[p];
 
         if (len - pos < 2)
         {
-            client_disconnect(cl, "(HELO) truncated packet");
+            client_disconnect(cl, "(JOIN) truncated packet");
             return;
         }
 
@@ -513,13 +561,13 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         size_t L = buf[pos++];
         if (L > MAX_NAME_LEN)
         {
-            client_disconnect(cl, "(HELO) player name too long");
+            client_disconnect(cl, "(JOIN) player name too long");
             return;
         }
 
         if (L < 1 || L > len - pos)
         {
-            client_disconnect(cl, "(HELO) invalid name length");
+            client_disconnect(cl, "(JOIN) invalid name length");
             return;
         }
 
@@ -529,13 +577,13 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
             pl->name[n] = buf[pos++];
             if (pl->name[n] < 32 || pl->name[n] > 126)
             {
-                client_disconnect(cl, "(HELO) invalid characters in player name");
+                client_disconnect(cl, "(JOIN) invalid characters in player name");
                 return;
             }
         }
         if (pl->name[0] == ' ' || pl->name[L-1] == ' ')
         {
-            client_disconnect(cl, "(HELO) player name may not start or "
+            client_disconnect(cl, "(JOIN) player name may not start or "
                                   "end with space");
             return;
         }
@@ -554,7 +602,7 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
                 if (strcmp(cl->players[p].name, g_clients[n].players[m].name) == 0)
                 {
                     char reason[128];
-                    sprintf(reason, "(HELO) player name \"%s\" already in use "
+                    sprintf(reason, "(JOIN) player name \"%s\" already in use "
                                     "on this server", cl->players[p].name);
                     client_disconnect(cl, reason);
                     return;
@@ -567,11 +615,6 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         pl->index = -1;
     }
 
-    if (pos < len)
-    {
-        cl->flags = buf[pos++]&CLFL_ALL;
-    }
-
     /* Bring player up-to-date. */
     if (g_num_players > 0)
     {
@@ -579,7 +622,7 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
         packet_begin(STRT_buf[0]);
         packet_write(STRT_buf + 1, STRT_len - 1);
         packet_end();
-        packet_send(cl, true);
+        packet_send(cl);
 
         /* Send fast-forward packet */
         packet_begin(MRSC_FFWD);
@@ -595,11 +638,77 @@ static void handle_HELO(Client *cl, unsigned char *buf, size_t len)
             packet_write_byte(0);
         }
         packet_end();
-        packet_send(cl, true);
+        packet_send(cl);
 
         /* Send current scores */
         send_scores(cl);
     }
+}
+
+static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
+{
+    size_t pos = 1;
+
+    /* Get player name */
+    char name[MAX_NAME_LEN + 1];
+    if (len - pos < 1) goto malformed;
+    size_t L = buf[pos++];
+    if (L > len - pos || L > MAX_NAME_LEN) goto malformed;
+    memcpy(name, &buf[pos], L);
+    name[L] = '\0';
+    pos += L;
+
+    /* Get message text */
+    unsigned char *msg = &buf[pos];
+    size_t msg_len = len - pos;
+    if (msg_len < 1) return;
+    if (msg_len > 255) msg_len = 255;   /* limit chat message length */
+
+    /* Ensure player name is valid */
+    Player *pl = NULL;
+    for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
+    {
+        if (cl->players[n].in_use && strcmp(cl->players[n].name, name) == 0)
+        {
+            pl = &cl->players[n];
+            break;
+        }
+    }
+
+    if (pl == NULL)
+    {
+        warn( "Chat message from player %s ignored (not connected to client).\n",
+              name );
+        return;
+    }
+
+    msg[msg_len] = '\0'; /* hack */
+    info("(CHAT) %s: %s", pl->name, msg);
+
+    /* Write to replay file */
+    if (fp_replay != NULL)
+    {
+        fprintf(fp_replay, "CHAT %s: %s\n", pl->name, msg);
+    }
+
+    /* Build message packet */
+    {
+        packet_begin(MRSC_CHAT);
+        size_t name_len = strlen(pl->name);
+        packet_write_byte(name_len);
+        packet_write(pl->name, name_len);
+        for (size_t n = 0; n < msg_len; ++n)
+        {
+            packet_write_byte((msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ');
+        }
+        packet_end();
+        packet_broadcast(true);
+    }
+    return;
+
+malformed:
+    warn("Malformed CHAT message ignored.\n");
+    return;
 }
 
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
@@ -640,74 +749,6 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
             }
         }
     }
-}
-
-static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
-{
-    size_t pos = 1;
-
-    /* Get player name */
-    char name[MAX_NAME_LEN + 1];
-    if (len - pos < 1) goto malformed;
-    size_t L = buf[pos++];
-    if (L > len - pos || L > MAX_NAME_LEN) goto malformed;
-    memcpy(name, &buf[pos], L);
-    name[L] = '\0';
-    pos += L;
-    hex_dump(buf, len);
-    printf("%zd %s\n", L, name);
-
-    /* Get message text */
-    unsigned char *msg = &buf[pos];
-    size_t msg_len = len - pos;
-    if (msg_len < 1) return;
-    if (msg_len > 255) msg_len = 255;   /* limit chat message length */
-
-    /* Ensure player name is valid */
-    Player *pl = NULL;
-    for (int n = 0; n < PLAYERS_PER_CLIENT; ++n)
-    {
-        if (cl->players[n].in_use && strcmp(cl->players[n].name, name) == 0)
-        {
-            pl = &cl->players[n];
-            break;
-        }
-    }
-
-    if (pl == NULL)
-    {
-        warn( "Chat message from player %s ignored (not connected to client).\n",
-              name );
-        return;
-    }
-
-    msg[msg_len] = '\0'; /* hack */
-    info("(CHAT) %s: %s", pl->name, msg);
-
-    /* Write to replay file */
-    if (fp_replay != NULL)
-    {
-        fprintf(fp_replay, "CHAT %s: %s\n", pl->name, msg);
-    }
-
-    /* Build message packet */
-    {
-        packet_begin(MRSC_MESG);
-        size_t name_len = strlen(pl->name);
-        packet_write_byte(name_len);
-        packet_write(pl->name, name_len);
-        for (size_t n = 0; n < msg_len; ++n)
-        {
-            packet_write_byte((msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ');
-        }
-        packet_end();
-        packet_broadcast(true);
-    }
-    return;
-
-malformed:
-    warn("Malformed CHAT message ignored.\n");
-    return;
 }
 
 static void restart_game()
@@ -964,9 +1005,9 @@ static void send_scores(Client *cl)
     }
     packet_end();
     if (cl == NULL)
-        packet_broadcast(true);
+        packet_broadcast();
     else
-        packet_send(cl, true);
+        packet_send(cl);
 }
 
 /* Executes one move for the given player and updates his timestamp: */
@@ -1136,10 +1177,10 @@ static void do_frame()
     }
 
     /* Broadcast moves packet */
-    packet_begin(MUSC_MOVE);
+    packet_begin(MRSC_MOVE);
     packet_write(data, ptr - data);
     packet_end();
-    packet_broadcast(false);
+    packet_broadcast(true);
 }
 
 /* Processes frames until the server is up to date, and returns the
@@ -1156,30 +1197,6 @@ static double process_frames()
     } while (g_num_players > 0);
     return 1.0;
 }
-
-static bool socket_set_blocking(SOCKET fd, bool val)
-{
-    /* Note that we set FIONBIO (NON-blocking IO!) iff val is false! */
-#ifdef WIN32
-    unsigned long v = !val;
-#else
-    int v = !val;
-#endif
-    return ioctl(fd, FIONBIO, &v) == 0;
-}
-
-#if 0
-static bool socket_set_delayed(SOCKET fd, bool val)
-{
-    /* Note that we set the NODELAY option iff val is false! */
-#ifdef WIN32
-    BOOL v = !val;
-#else
-    int v = !val;
-#endif
-    return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v)) == 0;
-}
-#endif
 
 static int run()
 {
@@ -1240,13 +1257,6 @@ static int run()
             }
             else
             {
-#if 0
-                if (!socket_set_delayed(fd, 0))
-                {
-                    warn("could not put TCP socket in undelayed mode");
-                }
-#endif
-
                 int n = 0;
                 while ( n < MAX_CLIENTS &&
                         (g_clients[n].in_use || g_clients[n].zombie) ) ++n;
@@ -1320,7 +1330,7 @@ static int run()
                 }
                 else
                 {
-                    handle_packet(cl, buf, buf_len, false);
+                    handle_packet(cl, buf, buf_len);
                 }
             }
         }
@@ -1358,7 +1368,7 @@ static int run()
                     else
                     if (cl->buf_pos >= len + 2)
                     {
-                        handle_packet(cl, cl->buf + 2, len, true);
+                        handle_packet(cl, cl->buf + 2, len);
                         memmove( cl->buf, cl->buf + len + 2,
                                  cl->buf_pos - (len + 2) );
                         cl->buf_pos -= len + 2;

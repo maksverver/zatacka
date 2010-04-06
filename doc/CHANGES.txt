@@ -6,3 +6,11 @@ Changes since 1.0-beta10:
  - changed network protocol to be more bandwidth-efficient
  - (temporarily?) removed unreliable transfer option
  - player's line width is a game parameter now
+
+Changes since 1.0-beta11:
+ - network protocol changed in an incompatible way!
+ - redefine MOVE messages so they always go over reliable connections
+ - dropped support for unreliable connections
+ - added support for immediately viewing the current game when a client joins
+ - added support for auto-negotation of Nagle's algorithm (disabled by default)
+

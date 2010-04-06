@@ -30,6 +30,8 @@
 MainWindow *g_window;   /* main window */
 ClientSocket *g_cs;     /* client connection to the server */
 GameParameters g_gp;    /* game parameters */
+Config g_config;        /* game config window */
+int g_feats;            /* protocol features used */
 
 int g_server_timestamp;   /* last timestamp received */
 int g_local_timestamp;    /* local estimated timestamp */
@@ -88,14 +90,85 @@ static void update_sprites()
     }
 }
 
-static void handle_MESG(unsigned char *buf, size_t len)
+static void handle_FEAT(unsigned char *buf, size_t len)
+{
+    if (len < 6) fatal("(FEAT) packet too short");
+
+    if (buf[1] != 3)
+    {
+        fatal( "(FEAT) incompatible server protocol (%d; expected 3)",
+               (int)buf[1], 3 );
+    }
+
+    /* Parse feats */
+    g_feats &= buf[5];
+
+    if (g_feats & FEAT_NODELAY)
+    {
+        if (g_cs->set_nodelay(true))
+            info("TCP_NODELAY socket option set.");
+        else
+            warn("Could not set TCP_NODELAY socket option!");
+    }
+
+    /* Set-up local players */
+    for (int n = 0; n < g_config.players(); ++n)
+    {
+        PlayerController *pc = NULL;
+
+        if (g_feats & FEAT_BOTS)
+        {
+            pc = PlayerController::load_bot(g_config.name(n).c_str());
+        }
+
+        if (pc == NULL)
+        {
+            int key_left  = g_config.key(n, 0);
+            int key_right = g_config.key(n, 1);
+            pc = new KeyboardPlayerController(key_left, key_right);
+            g_my_keys.push_back(key_left);
+            g_my_keys.push_back(key_right);
+        }
+        g_my_controllers.push_back(pc);
+        g_my_names.push_back(g_config.name(n));
+    }
+
+    /* Send JOIN message */
+    {
+        char packet[4096];
+        size_t pos = 0;
+
+        packet[pos++] = MRCS_JOIN;
+        packet[pos++] = g_my_names.size();
+        for (size_t n = 0; n < g_my_names.size(); ++n)
+        {
+            int flags = 0;
+            if (!g_my_controllers[n]->human()) flags |= PLFL_BOT;
+            packet[pos++] = flags;
+            packet[pos++] = g_my_names[n].size();
+            memcpy(packet + pos, g_my_names[n].data(), g_my_names[n].size());
+            pos += g_my_names[n].size();
+        }
+        g_cs->write(packet, pos, true);
+    }
+
+}
+
+static void handle_QUIT(unsigned char *buf, size_t len)
+{
+    std::string msg = "Disconnected by server!";
+    if (len > 1) msg += "\nReason: " + std::string((char*)buf + 1, len - 1);
+    fatal("%s", msg.c_str());
+}
+
+static void handle_CHAT(unsigned char *buf, size_t len)
 {
     if (len < 2) return;
 
     size_t name_len = buf[1];
     if (name_len > len - 2)
     {
-        error("(MESG) invalid name length");
+        error("(CHAT) invalid name length");
         return;
     }
 
@@ -127,13 +200,6 @@ static void handle_MESG(unsigned char *buf, size_t len)
     {
         if (name != g_my_names[n]) g_my_controllers[n]->listen(name, text);
     }
-}
-
-static void handle_DISC(unsigned char *buf, size_t len)
-{
-    std::string msg = "Disconnected by server!";
-    if (len > 1) msg += "\nReason: " + std::string((char*)buf + 1, len - 1);
-    fatal("%s", msg.c_str());
 }
 
 static void handle_STRT(unsigned char *buf, size_t len)
@@ -432,7 +498,7 @@ static void forward_to(int timestamp)
         /* Create new move packet: */
         char packet[1 + g_my_players.size()];
         size_t packet_len = 0;
-        packet[packet_len++] = MUCS_MOVE;
+        packet[packet_len++] = MRCS_MOVE;
 
         for (size_t n = 0; n < g_my_players.size(); ++n)
         {
@@ -577,12 +643,13 @@ static void handle_packet(unsigned char *buf, size_t len)
 */
     switch ((int)buf[0])
     {
-    case MRSC_MESG: return handle_MESG(buf, len);
-    case MRSC_DISC: return handle_DISC(buf, len);
+    case MRSC_FEAT: return handle_FEAT(buf, len);
+    case MRSC_QUIT: return handle_QUIT(buf, len);
+    case MRSC_CHAT: return handle_CHAT(buf, len);
     case MRSC_STRT: return handle_STRT(buf, len);
+    case MRSC_MOVE: return handle_MOVE(buf, len);
     case MRSC_SCOR: return handle_SCOR(buf, len);
     case MRSC_FFWD: return handle_FFWD(buf, len);
-    case MUSC_MOVE: return handle_MOVE(buf, len);
     default: error("invalid message type");
     }
 }
@@ -700,81 +767,6 @@ std::string get_config_path()
     return "zatacka.cfg";
 }
 
-#ifndef WIN32
-#include <dlfcn.h>
-static PlayerController *load_bot_posix(const char *name)
-{
-    char path[64];
-
-    /* Ensure filename is sensible */
-    if (strchr(name, '/') || strchr(name, '.') || strlen(name) > 40)
-    {
-        return NULL;
-    }
-
-    sprintf(path, "bots/%s.so", name);
-    void *dlh = dlopen(path, RTLD_NOW);
-    if (dlh == NULL)
-    {
-        info("dlopen failed -- %s", dlerror());
-        return NULL;
-    }
-
-    void *func = dlsym(dlh, "create_bot");
-    if (func == NULL)
-    {
-        info("dlsym failed -- %s", dlerror());
-        dlclose(dlh);
-        return NULL;
-    }
-
-    PlayerController *pc = ((PlayerController*(*)())func)();
-    if (pc == NULL) info("%s: create_bot() returned NULL", path);
-    return pc;
-}
-#endif /* ndef WIN32 */
-
-#ifdef WIN32
-static PlayerController *load_bot_win32(const char *name)
-{
-    char path[64];
-
-    /* Ensure filename is sensible */
-    if (strchr(name, '/') || strchr(name, '.') || strchr(name, '\\') || strlen(name) > 40)
-    {
-        return NULL;
-    }
-
-    sprintf(path, "bots\\%s.dll", name);
-    HMODULE hModule = LoadLibrary(path);
-    if (hModule == NULL)
-    {
-        info("Couldn't load library %s", path);
-        return NULL;
-    }
-
-    void *func = (void*)GetProcAddress(hModule, "create_bot");
-    if (func == NULL)
-    {
-        info("Couldn't find function create_bot() in %s", path);
-        FreeLibrary(hModule);
-        return NULL;
-    }
-
-    PlayerController *pc = ((PlayerController*(*)())func)();
-    if (pc == NULL) info("%s: create_bot() returned NULL", path);
-    return pc;
-}
-#endif /* def WIN32 */
-
-static PlayerController *load_bot(const char *name)
-{
-#ifdef WIN32
-    return load_bot_win32(name);
-#else
-    return load_bot_posix(name);
-#endif
-}
 
 int main(int argc, char *argv[])
 {
@@ -789,71 +781,39 @@ int main(int argc, char *argv[])
 
     /* Configuration */
     std::string config_path = get_config_path();
-    Config cfg;
-    cfg.load_settings(config_path.c_str());
+    g_config.load_settings(config_path.c_str());
     do {
-        if (!cfg.show_window()) return 0;
-        cfg.save_settings(config_path.c_str());
+        if (!g_config.show_window()) return 0;
+        g_config.save_settings(config_path.c_str());
+
+        /* Initialize requested protocol features:*/
+        g_feats = FEAT_BOTS | FEAT_NODELAY;
 
         /* Try to connect to the server */
-        g_cs = new ClientSocket( cfg.hostname().c_str(), cfg.port(),
-                                 cfg.reliable_only() );
+        g_cs = new ClientSocket( g_config.hostname().c_str(), g_config.port(),
+                                 g_config.reliable_only() );
         if (!g_cs->connected())
         {
             fl_alert( "The network connection could not be established!\n"
                       "Please check the specified host name (%s) and port (%d)",
-                      cfg.hostname().c_str(), cfg.port() );
+                      g_config.hostname().c_str(), g_config.port() );
         }
+
     } while (!g_cs->connected());
 
-    /* Create window */
-    g_window = new MainWindow(800, 600, cfg.fullscreen(), cfg.antialiasing());
-    g_window->show();
-
-    /* Set-up local players */
-    for (int n = 0; n < cfg.players(); ++n)
-    {
-        PlayerController *pc = load_bot(cfg.name(n).c_str());
-        if (pc == NULL)
-        {
-            int key_left  = cfg.key(n, 0);
-            int key_right = cfg.key(n, 1);
-            pc = new KeyboardPlayerController(key_left, key_right);
-            g_my_keys.push_back(key_left);
-            g_my_keys.push_back(key_right);
-        }
-        g_my_controllers.push_back(pc);
-        g_my_names.push_back(cfg.name(n));
-    }
-
-    /* Send hello message */
-    {
-        char packet[4096];
-        size_t pos = 0;
-
-        packet[pos++] = MRCS_HELO;
-        packet[pos++] = PROTOCOL_VERSION;
-        packet[pos++] = g_my_names.size();
-        for (size_t n = 0; n < g_my_names.size(); ++n)
-        {
-            int flags = 0;
-            if (!g_my_controllers[n]->human()) flags |= PLFL_BOT;
-            packet[pos++] = flags;
-            packet[pos++] = g_my_names[n].size();
-            memcpy(packet + pos, g_my_names[n].data(), g_my_names[n].size());
-            pos += g_my_names[n].size();
-        }
-        int flags = 0;
-        if (g_cs->reliable_only()) flags |= CLFL_RELIABLE_ONLY;
-        packet[pos++] = flags;
-        g_cs->write(packet, pos, true);
-    }
+    /* Send FEAT packet */
+    char feat_packet[6] = { MRCS_FEAT, 3, 0, 0, 0, g_feats };
+    g_cs->write(feat_packet, 6, true);
 
 #ifdef WITH_AUDIO
     /* Initialize audio */
     g_audio = Audio::instance();
     if (g_audio) g_audio->play_music("pizzaworm.mod");
 #endif
+
+    /* Create main window */
+    g_window = new MainWindow(800, 600, g_config.fullscreen(), g_config.antialiasing());
+    g_window->show();
 
     Fl::add_timeout(0, callback, NULL);
     Fl::run();
