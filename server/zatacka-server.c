@@ -9,6 +9,7 @@
 #include <common/Time.h>
 
 #include <assert.h>
+#include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -38,38 +39,88 @@ const SOCKET INVALID_SOCKET = -1;
 typedef int socklen_t;
 #endif
 
+#ifndef MAX_PATH
+#define MAX_PATH 4096
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
+struct Option {
+    const char *name;
+    const char *description;
+    enum OptionType { OptInt, OptStr } type;
+    union {
+        struct StrOpt { char *buf; size_t len; } str_var;
+        struct IntOpt { int *var, min, max; } int_var;
+    } var;
+};
+
+/* Compile-time server parameters: */
 #define MAX_CLIENTS           (64)
-#define SERVER_FPS            (30)
 #define MOVE_BACKLOG          (60)
 #define MAX_PACKET_LEN     (16384)
 #define MAX_NAME_LEN          (20)
 #define PLAYERS_PER_CLIENT     (4)
-#define TURN_RATE             (48)
-#define MOVE_RATE              (6)
-#define LINE_WIDTH             (7)
-#define SCORE_HISTORY         (10)
-#define HOLE_PROBABILITY      (60)
-#define HOLE_LENGTH_MIN        (3)
-#define HOLE_LENGTH_MAX        (8)
-#define HOLE_COOLDOWN         (10)
+#define MAX_SCORE_HISTORY   (1000)
 #define MAX_FF_LEN         (10000)
+#define SERVER_FEATS        (FEAT_NODELAY|FEAT_BOTS)
+#define CONFIG_FILENAME     "zatacka-server.conf"
 
-#define VICTORY_TIME        (3*SERVER_FPS)
-#define WARMUP              (3*SERVER_FPS)
+/* Derived server parameters: */
+#define VICTORY_TIME        (VICTORY_SECONDS*SERVER_FPS)
+#define WARMUP_TIME         (WARMUP_SECONDS*SERVER_FPS)
 #define MAX_PLAYERS         (PLAYERS_PER_CLIENT*MAX_CLIENTS)
 
-#define SERVER_FEATS        (FEAT_NODELAY|FEAT_BOTS)
+/* Configurable server parameters: */
+static int SERVER_PORT       = 12321;  /*  1 */
+static int SERVER_FPS        =    30;  /*  2 */
+static int TURN_RATE         =    48;  /*  3 */
+static int MOVE_RATE         =     6;  /*  4 */
+static int LINE_WIDTH        =     7;  /*  5 */
+static int SCORE_HISTORY     =    10;  /*  6 */
+static int HOLE_PROBABILITY  =    60;  /*  7 */
+static int HOLE_LENGTH_MIN   =     3;  /*  8 */
+static int HOLE_LENGTH_MAX   =     8;  /*  9 */
+static int HOLE_COOLDOWN     =    10;  /* 10 */
+static int WARMUP_SECONDS    =     3;  /* 11 */
+static int VICTORY_SECONDS   =     3;  /* 12 */
+static char REPLAY_DIR[MAX_PATH];      /* 13 */
+static char BITMAP_DIR[MAX_PATH];      /* 14 */
 
-#ifdef REPLAY
-#ifndef REPLAYDIR
-#define REPLAYDIR           "replay"
-#endif /* ndef REPLAYDIR */
-#endif /* def REPLAY */
+#define NUM_OPTIONS 14
 
+#define INT_OPT(n, d, v, mn, mx) { .name=n, .description=d, .type=OptInt, \
+    .var={ .int_var={ .var=&v, .min=mn, .max=mx } } }
+#define STR_OPT(n, d, v) { .name = n, .description=d, .type=OptStr, \
+    .var={ .str_var={ .buf = v, .len = sizeof(v) } } }
+
+static struct Option options[NUM_OPTIONS] = {
+    INT_OPT("port",        "TCP and UDP port to bind",  SERVER_PORT, 1, 65535),
+    INT_OPT("fps",         "frames per second",         SERVER_FPS,  1,    50),
+    INT_OPT("turn_rate",   "turn rate (frames/circle)", TURN_RATE,   4,   255),
+    INT_OPT("move_rate",   "move rate (pixels/frame)",  MOVE_RATE,   1,   255),
+    INT_OPT("line_width",  "line width (pixels)",       LINE_WIDTH,  1,   100),
+    INT_OPT("score_history", "accumulated score history length (rounds)",
+                                          SCORE_HISTORY, 1, MAX_SCORE_HISTORY),
+    INT_OPT("hole_probability", "inverse probability of generating a hole",
+                                                   HOLE_PROBABILITY, 1, 65535),
+    INT_OPT("hole_length_min", "minimum hole length (frames)",
+                                                   HOLE_LENGTH_MIN,  1,   255),
+    INT_OPT("hole_length_max", "maximum hole length (frames)",
+                                                   HOLE_LENGTH_MAX,  1,   255),
+    INT_OPT("hole_cooldown",   "minimum time between holes (frames)",
+                                                   HOLE_COOLDOWN,    1,   255),
+    INT_OPT("warmup_secs", "warm-up time (seconds)",
+                                                   WARMUP_SECONDS,   1,     5),
+    INT_OPT("victory_secs", "extra time at end of game (seconds)",
+                                                   VICTORY_SECONDS,  1,     5),
+    STR_OPT("replay_dir", "directory to write replays to", REPLAY_DIR),
+    STR_OPT("bitmap_dir", "directory to write field bitmaps to", BITMAP_DIR) };
+
+#undef INT_OPT
+#undef STR_OPT
 
 typedef struct Player
 {
@@ -93,7 +144,7 @@ typedef struct Player
     /* Scores */
     int             score_total;
     int             score_moving_sum;
-    int             score_history[SCORE_HISTORY];
+    int             score_history[MAX_SCORE_HISTORY];
     int             score_holes;
 
     /* Hole creation */
@@ -160,9 +211,8 @@ static size_t packet_len;                         /* size of packet payload */
 static char STRT_buf[MAX_PACKET_LEN];       /* last STRT packet issued */
 static size_t STRT_len;                     /* last STRT packet's length */
 
-#ifdef REPLAY
-static FILE *fp_replay;         /* Record replay to this file */
-#endif
+static char replay_path[MAX_PATH];      /* file name of open replay file */
+static FILE *fp_replay;                 /* replay file pointer */
 
 /*
     Function prototypes
@@ -193,13 +243,13 @@ static size_t packet_write(const char *buf, size_t len);
 static int packet_vprintf(const char *fmt, va_list ap);
 
 /* Finish the packet */
-static void packet_end();
+static void packet_end(void);
 
 /* Send a packet to a client */
 static void packet_send(Client *cl);
 
 /* Broadcast a packet to all connected clients */
-static void packet_broadcast();
+static void packet_broadcast(void);
 
 /* Kill a player */
 static void player_kill(Player *p);
@@ -215,16 +265,16 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len);
 static void handle_MOVE(Client *cl, unsigned char *buf, size_t len);
 
 /* Restart the game (called when all players have died) */
-static void restart_game();
+static void restart_game(void);
 
 /* Send scores to all clients */
 static void send_scores(Client *cl);
 
 /* Process a server frame. */
-static void do_frame();
+static void do_frame(void);
 
 /* Server main loop */
-static int run();
+static int run(void);
 
 /* Application entry point */
 int main(int argc, char *argv[]);
@@ -235,7 +285,7 @@ int main(int argc, char *argv[]);
 #ifdef WIN32
 #define srandom(seed) srand(seed)
 
-static int random()
+static int random(void)
 {
     /* On Windows, rand() returns a 15 bits number.
        We combine the result from three calls to obtain a 31 number. */
@@ -329,14 +379,14 @@ static int packet_vprintf(const char *fmt, va_list ap)
     return written;
 }
 
-static void packet_end()
+static void packet_end(void)
 {
     /* Add 16-bit packet length in front (in network order) */
     packet_buf[-2] = (packet_len >> 8)&0xff;
     packet_buf[-1] = (packet_len >> 0)&0xff;
 }
 
-static void packet_broadcast()
+static void packet_broadcast(void)
 {
     for (int n = 0; n < MAX_CLIENTS; ++n)
     {
@@ -415,7 +465,7 @@ static void message(const char *fmt, ...)
     packet_write_byte(0);
     packet_vprintf(fmt, ap);
     packet_end();
-    packet_broadcast(true);
+    packet_broadcast();
 
     va_end(ap);
 }
@@ -438,7 +488,7 @@ static void player_kill(Player *pl)
     pl->dead_since = pl->timestamp;
     --g_num_alive;
 
-    if (pl->timestamp >= WARMUP)
+    if (pl->timestamp >= WARMUP_TIME)
     {
         if (g_num_alive <= 1 && g_deadline == -1)
         {
@@ -677,7 +727,7 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
 
     if (pl == NULL)
     {
-        warn( "Chat message from player %s ignored (not connected to client).\n",
+        warn( "chat message from player %s ignored (not connected to client)",
               name );
         return;
     }
@@ -702,12 +752,12 @@ static void handle_CHAT(Client *cl, unsigned char *buf, size_t len)
             packet_write_byte((msg[n] >= 32 && msg[n] <= 126) ? msg[n] : ' ');
         }
         packet_end();
-        packet_broadcast(true);
+        packet_broadcast();
     }
     return;
 
 malformed:
-    warn("Malformed CHAT message ignored.\n");
+    warn("malformed CHAT message ignored");
     return;
 }
 
@@ -751,45 +801,61 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
     }
 }
 
-static void restart_game()
+static void restart_game(void)
 {
+    /* Write a bitmap, but only if somebody move in this game: */
+    if (g_deadline > 0 && BITMAP_DIR[0] != '\0')
+    {
+        char path[MAX_PATH];
+
+        /* Dump field to BMP image */
+        snprintf(path, sizeof(path), "%s/field-%08x.bmp", BITMAP_DIR, g_gameid);
+        if (bmp_write(path, &g_field[0][0], FIELD_SIZE, FIELD_SIZE))
+        {
+            info("field dumped to file \"%s\"", path);
+        }
+        else
+        {
+            warn("couldn't write BMP file \"%s\"", path);
+        }
+    }
+
+    if (fp_replay)
+    {
+        fclose(fp_replay);
+        fp_replay = NULL;
+
+        /* Remove replay if nobody moved: */
+        if (g_deadline <= 0)
+        {
+            info("removing empty replay file \"%s\"", replay_path);
+            unlink(replay_path);
+        }
+    }
+
     g_time_start = time_now();
     g_timestamp = 0;
     g_deadline = -1;
 
     for (int n = 0; n < MAX_CLIENTS; ++n) g_clients[n].zombie = false;
 
+    /* Early out: if nobody is connected, don't bother with the rest. */
     if (g_num_clients == 0) return;
 
-#ifdef BMP
-    if (g_gameid != 0)
+    /* Update scores, only if somebody moved: */
+    if (g_deadline > 0)
     {
-        char path[32];
-
-        /* Dump field to BMP image */
-        sprintf(path, "bmp/field-%08x.bmp", g_gameid);
-        if (bmp_write(path, &g_field[0][0], FIELD_SIZE, FIELD_SIZE))
+        for (int n = 0; n < g_num_players; ++n)
         {
-            info("Field dumped to file \"%s\"", path);
+            Player *pl = g_players[n];
+            pl->score_moving_sum -= pl->score_history[SCORE_HISTORY - 1];
+            for (int s = SCORE_HISTORY - 1; s > 0; --s)
+            {
+                pl->score_history[s] = pl->score_history[s - 1];
+            }
+            pl->score_history[0] = 0;
+            pl->score_holes = 0;
         }
-        else
-        {
-            warn("Couldn't write BMP file \"%s\"", path);
-        }
-    }
-#endif
-
-    /* Update scores */
-    for (int n = 0; n < g_num_players; ++n)
-    {
-        Player *pl = g_players[n];
-        pl->score_moving_sum -= pl->score_history[SCORE_HISTORY - 1];
-        for (int s = SCORE_HISTORY - 1; s > 0; --s)
-        {
-            pl->score_history[s] = pl->score_history[s - 1];
-        }
-        pl->score_history[0] = 0;
-        pl->score_holes = 0;
     }
 
     /* Find players for the next game */
@@ -818,7 +884,7 @@ static void restart_game()
                ((rand()&255) <<  8) |
                ((rand()&255) <<  0);
 
-    info("Starting game %08x with %d players", g_gameid, g_num_alive);
+    info("starting game %08x with %d players", g_gameid, g_num_alive);
 
     memset(g_field, 0, sizeof(g_field));
     memset(g_holes, 0, sizeof(g_holes));
@@ -883,22 +949,21 @@ static void restart_game()
         }
     }
 
-#ifdef REPLAY
+    if (REPLAY_DIR[0] != '\0')
     {
         /* Open replay file for new game */
-        char path[32];
-        if (fp_replay != NULL) fclose(fp_replay);
-        sprintf(path, REPLAYDIR "/game-%08x.txt", g_gameid);
-        fp_replay = fopen(path, "wt");
+        snprintf( replay_path, sizeof(replay_path),
+                  "%s/game-%08x.txt", REPLAY_DIR, g_gameid );
+        fp_replay = fopen(replay_path, "wt");
         if (fp_replay != NULL)
         {
-            info("Opened replay file \"%s\"", path);
+            info("opened replay file \"%s\"", replay_path);
 
             /* Write header */
             fprintf( fp_replay, "%d %u %d\n",
                      1, g_gameid, g_num_players );
             fprintf( fp_replay, "%d %d %d %d %d %d %d %d %d\n",
-                     SERVER_FPS, TURN_RATE, MOVE_RATE, LINE_WIDTH, WARMUP,
+                     SERVER_FPS, TURN_RATE, MOVE_RATE, LINE_WIDTH, WARMUP_TIME,
                      HOLE_PROBABILITY, HOLE_LENGTH_MIN, HOLE_LENGTH_MAX,
                      HOLE_COOLDOWN );
 
@@ -919,10 +984,9 @@ static void restart_game()
         }
         else
         {
-            warn("Couldn't open file \"%s\" for writing", path);
+            warn("could not open file \"%s\" for writing", replay_path);
         }
     }
-#endif
 
     /* Build start game packet */
     packet_begin(MRSC_STRT);
@@ -930,7 +994,7 @@ static void restart_game()
     packet_write_byte(TURN_RATE);
     packet_write_byte(MOVE_RATE);
     packet_write_byte(LINE_WIDTH);
-    packet_write_byte(WARMUP);
+    packet_write_byte(WARMUP_TIME);
     packet_write_byte(SCORE_HISTORY);
     packet_write_byte((HOLE_PROBABILITY >> 8)&255);
     packet_write_byte((HOLE_PROBABILITY >> 0)&255);
@@ -979,7 +1043,7 @@ static void restart_game()
     }
 
     /* Send start packet to all clients */
-    packet_broadcast(true);
+    packet_broadcast();
     send_scores(NULL);
 }
 
@@ -1016,7 +1080,7 @@ static void do_player_move(Player *pl, Move m)
     assert(pl->dead_since == -1);
 
     if ( pl->hole == 0 &&
-            pl->timestamp >= WARMUP +  HOLE_COOLDOWN &&
+            pl->timestamp >= WARMUP_TIME + HOLE_COOLDOWN &&
             pl->timestamp - pl->solid_since >= HOLE_COOLDOWN &&
             pl->rng_base%HOLE_PROBABILITY == 0 )
     {
@@ -1027,18 +1091,16 @@ static void do_player_move(Player *pl, Move m)
     }
 
     /* Calculate movement */
-    int v = (pl->timestamp < WARMUP ? 0 : 1);
+    int v = (pl->timestamp < WARMUP_TIME ? 0 : 1);
     int a = (m == MOVE_TURN_LEFT)  ? +1 :
             (m == MOVE_TURN_RIGHT) ? -1 : 0;
 
-#ifdef REPLAY
     if (fp_replay != NULL)
     {
         /* Write to replay: player, turn, move*/
         fprintf( fp_replay, "MOVE %d %d %d\n",
                     pl->index, a, (pl->hole ? 2 : v) );
     }
-#endif
 
     /* Register movement during warmup */
     if (!v && a) pl->has_moved = true;
@@ -1082,7 +1144,7 @@ static void do_player_move(Player *pl, Move m)
     }
 
     /* Kill players that do not move during the warmup period */
-    if (pl->timestamp + 1 == WARMUP && !pl->has_moved) player_kill(pl);
+    if (pl->timestamp + 1 == WARMUP_TIME && !pl->has_moved) player_kill(pl);
 
     /* Update player timestamp and RNG: */
     ++pl->timestamp;
@@ -1105,7 +1167,7 @@ static void do_player_move(Player *pl, Move m)
     }
 }
 
-static void do_frame()
+static void do_frame(void)
 {
     char data[MAX_PLAYERS*(MOVE_BACKLOG + 1)], *ptr = data;
 
@@ -1180,12 +1242,12 @@ static void do_frame()
     packet_begin(MRSC_MOVE);
     packet_write(data, ptr - data);
     packet_end();
-    packet_broadcast(true);
+    packet_broadcast();
 }
 
 /* Processes frames until the server is up to date, and returns the
    number of seconds until the next frame must be processed. */
-static double process_frames()
+static double process_frames(void)
 {
     do {
         /* Compute time to next tick */
@@ -1198,7 +1260,7 @@ static double process_frames()
     return 1.0;
 }
 
-static int run()
+static int run(void)
 {
     for (;;)
     {
@@ -1262,7 +1324,7 @@ static int run()
                         (g_clients[n].in_use || g_clients[n].zombie) ) ++n;
                 if (n == MAX_CLIENTS)
                 {
-                    warn( "No client slot free; rejecting connection from %s:%d",
+                    warn( "no client slot free; rejecting connection from %s:%d",
                           inet_ntoa(sa.sin_addr), ntohs(sa.sin_port) );
                     close(fd);
                 }
@@ -1380,13 +1442,159 @@ static int run()
     return 0;
 }
 
+static char *trim(char *str)
+{
+    char *eol = str + strlen(str);
+    while (isspace(*str)) ++str;
+    if (str == eol) return eol;
+    while (isspace(eol[-1])) --eol;
+    *eol = '\0';
+    return str;
+}
+
+static void set_int_opt(const char *key, const char *val, struct IntOpt *iv)
+{
+    int i;
+    if (sscanf(val, "%i", &i) < 1)
+    {
+        fatal("option %s requires an integer value (not '%s')", key, val);
+    }
+    if (i < iv->min)
+    {
+        fatal("option %s must be at least %d (not %d)", key, iv->min, i);
+    }
+    if (i > iv->max)
+    {
+        fatal("option %s can be at most %d (not %d)", key, iv->max, i);
+    }
+    *iv->var = i;
+}
+
+static void set_str_opt(const char *key, const char *val, struct StrOpt *sv)
+{
+    if (strlen(val) >= sv->len)
+    {
+        fatal("option %s can be at most %d bytes long", key, sv->len - 1);
+    }
+    strcpy(sv->buf, val);
+}
+
+static void parse_option(char *key)
+{
+    int i;
+    char *p, *val;
+
+    if ((val = strchr(key, '=')) == NULL) fatal("missing = in option: %s", key);
+
+    /* Get trimmed key/value strings: */
+    *val = '\0';
+    key = trim(key);
+    val = trim(val + 1);
+
+    /* Replace spaces/dashes with underscores in key: */
+    for (p = key; *p != '\0'; ++p) if (*p == ' ' || *p == '-') *p = '_';
+
+    /* Find a matching option: */
+    for (i = 0; i < NUM_OPTIONS; ++i)
+    {
+        if (strcmp(options[i].name, key) == 0)
+        {
+            switch (options[i].type)
+            {
+            case OptInt: return set_int_opt(key, val, &options[i].var.int_var);
+            case OptStr: return set_str_opt(key, val, &options[i].var.str_var);
+            default: fatal("unsupported option type");  /* should not occur */
+            }
+        }
+    }
+    fatal("unknown option: %s", key);
+}
+
+static void parse_args(int argc, char *argv[])
+{
+    int i;
+
+    for (i = 1; i < argc; ++i)
+    {
+        if (argv[i][0] == '-' && argv[i][1] == '-')
+        {
+            parse_option(argv[i] + 2);
+        }
+        else
+        {
+            fprintf(stderr, "Unrecognized command line argument: %s\n", argv[i]);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+static void print_config(FILE *fp)
+{
+    int i;
+
+    fprintf(fp, "# Zatacka server config file.\n"
+"# Save this file to "CONFIG_FILENAME" in the server working directory, and\n"
+"# remember to uncomment options you want to change.\n\n");
+    for (i = 0; i < NUM_OPTIONS; ++i)
+    {
+        switch (options[i].type)
+        {
+        case OptInt:
+            fprintf(fp,
+                "# %2$c%3$s (between %4$d and %5$d; default: %6$d)\n"
+                "#%1$s=%6$d\n\n",
+                options[i].name,
+                toupper(options[i].description[0]), options[i].description + 1,
+                options[i].var.int_var.min, options[i].var.int_var.max,
+                *options[i].var.int_var.var );
+            break;
+
+        case OptStr:
+            fprintf(fp,
+                "# %2$c%3$s (up to %4$d bytes; default: '%5$s')\n"
+                "#%1$s=%5$s\n\n",
+                options[i].name,
+                toupper(options[i].description[0]), options[i].description + 1,
+                (int)options[i].var.str_var.len - 1,
+                options[i].var.str_var.buf );
+            break;
+
+        default: fatal("unsupported option type");  /* should not occur */
+        }
+    }
+}
+
+static void read_config_file(void)
+{
+    char line[16384];
+    FILE *fp = fopen(CONFIG_FILENAME, "rt");
+    if (fp == NULL)
+    {
+        warn(CONFIG_FILENAME" not found. Default options will be used.\n"
+"Run zatacka-server --default-config to generate a default config file.");
+    }
+    while (fgets(line, sizeof(line), fp) != NULL)
+    {
+        char *p = trim(line);
+        if (*p == '#' || *p == '\0') continue;
+        parse_option(line);
+    }
+    fclose(fp);
+}
+
 int main(int argc, char *argv[])
 {
     srandom(time(NULL));
     time_reset();
 
-    (void)argc;
-    (void)argv;
+    if (argc >= 2 && strcmp(argv[1], "--default-config") == 0)
+    {
+        print_config(stdout);
+        return 0;
+    }
+
+    read_config_file();
+    parse_args(argc, argv);
 
 #ifdef WIN32
     WSADATA wsaData;
@@ -1414,7 +1622,7 @@ int main(int argc, char *argv[])
 
     struct sockaddr_in sa_local;
     sa_local.sin_family = AF_INET;
-    sa_local.sin_port   = htons(12321);
+    sa_local.sin_port   = htons(SERVER_PORT);
     sa_local.sin_addr.s_addr = INADDR_ANY;
 
     /* Create TCP listening socket */
