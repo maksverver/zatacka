@@ -22,11 +22,12 @@ static void draw_text( const char *text, int font_size,
                        int x, int y, int w, int h, Fl_Align align )
 {
     fl_font(FL_HELVETICA, font_size);
-    fl_color(fl_gray_ramp(FL_NUM_GRAY/2));
-    fl_draw(text, x - 1, y    , w, h, align, 0, 0);
-    fl_draw(text, x    , y - 1, w, h, align, 0, 0);
-    fl_draw(text, x + 1, y    , w, h, align, 0, 0);
-    fl_draw(text, x    , y + 1, w, h, align, 0, 0);
+    fl_color(FL_BLACK);
+    for (int dx = -2; dx <= 2; ++dx) {
+        for (int dy = -2; dy <= 2; ++dy) {
+            if (dx || dy) fl_draw(text, x + dx, y + dy, w, h, align, 0, 0);
+        }
+    }
     fl_color(FL_WHITE);
     fl_draw(text, x, y, w, h, align, 0, 0);
 }
@@ -49,9 +50,9 @@ void ScoreWidget::draw()
 
     /* Draw total and current-round score */
     sprintf(buf, "%d", pl.score_cur);
-    draw_text(buf, 12, x + w - 55, y + 5, 17, 20, FL_ALIGN_RIGHT);
+    draw_text(buf, 12, x + w - 60, y + 5, 17, 20, FL_ALIGN_RIGHT);
     sprintf(buf, "%d", pl.score_tot);
-    draw_text(buf, 12, x + w - 55, y + 17, 17, 20, FL_ALIGN_RIGHT);
+    draw_text(buf, 12, x + w - 60, y + 17, 17, 20, FL_ALIGN_RIGHT);
 
     /* Draw hole score */
     fl_color(fl_gray_ramp(FL_NUM_GRAY/2));
