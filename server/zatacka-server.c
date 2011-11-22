@@ -1572,6 +1572,7 @@ static void read_config_file(void)
     {
         warn(CONFIG_FILENAME" not found. Default options will be used.\n"
 "Run zatacka-server --default-config to generate a default config file.");
+        return;
     }
     while (fgets(line, sizeof(line), fp) != NULL)
     {
