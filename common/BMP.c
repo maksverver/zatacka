@@ -69,18 +69,6 @@ bool bmp_write( const char *path, unsigned char *image,
     bmp_header.biPlanes     = 1;
     bmp_header.biBitCount   = 8;
 
-    memset(&bmp_header, 0, sizeof(bmp_header));
-
-    bmp_header.bfType[0] = 'B';
-    bmp_header.bfType[1] = 'M';
-    bmp_header.bfSize = 54 + width*height + 256*4;
-    bmp_header.bfOffBits = 54 + 1024;
-    bmp_header.biSize = 40;
-    bmp_header.biWidth = width;
-    bmp_header.biHeight = height;
-    bmp_header.biPlanes = 1;
-    bmp_header.biBitCount = 8;
-
     assert(sizeof(bmp_header) == 54);
     assert(sizeof(bmp_palette) == 1024);
 
