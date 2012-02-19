@@ -1,5 +1,3 @@
-#define _POSIX_SOURCE
-
 #include <common/BMP.h>
 #include <common/Colors.h>
 #include <common/Debug.h>
@@ -27,6 +25,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 typedef int SOCKET;
 const SOCKET INVALID_SOCKET = -1;

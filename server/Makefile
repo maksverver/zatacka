@@ -1,9 +1,13 @@
 TOP=..
 include $(TOP)/base.mk
 
-CFLAGS+=-std=c99 -D_XOPEN_SOURCE=500 -I..
+CFLAGS+=-std=c99 -I..
 LDLIBS+=../common/common.a
 OBJS=zatacka-server.o
+
+ifeq "$(shell uname -o)" "GNU/Linux"
+CFLAGS+=-D_POSIX_SOURCE -D_BSD_SOURCE
+endif
 
 all: zatacka-server
 
