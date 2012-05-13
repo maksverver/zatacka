@@ -429,8 +429,8 @@ static void client_disconnect(Client *cl, const char *reason)
           cl - g_clients, inet_ntoa(cl->sa_remote.sin_addr),
           ntohs(cl->sa_remote.sin_port), reason );
 
-    /* Remove client -- it's important to do this first, because functions
-       call below may call disconnect again (i.e. if packet_send() fails) */
+    /* Remove client -- it's important to do this first, because functions like
+       packet_send() called below may recursively call client_disconnect(). */
     cl->in_use = false;
     --g_num_clients;
 
@@ -1414,26 +1414,22 @@ static int run(void)
             else
             {
                 cl->buf_pos += read;
-                while (cl->buf_pos >= 2 && cl->in_use)
+                while (cl->in_use && cl->buf_pos >= 2)
                 {
                     int len = 256*cl->buf[0] + cl->buf[1];
                     if (len > MAX_PACKET_LEN)
                     {
                         client_disconnect(cl, "packet too large");
+                        break;
                     }
-                    else
                     if (len < 1)
                     {
                         client_disconnect(cl, "packet too small");
+                        break;
                     }
-                    else
-                    if (cl->buf_pos >= len + 2)
-                    {
-                        handle_packet(cl, cl->buf + 2, len);
-                        memmove( cl->buf, cl->buf + len + 2,
-                                 cl->buf_pos - (len + 2) );
-                        cl->buf_pos -= len + 2;
-                    }
+                    if (cl->buf_pos < len + 2) break;
+                    handle_packet(cl, cl->buf + 2, len);
+                    memmove(cl->buf, cl->buf + len + 2, cl->buf_pos -= len + 2);
                 }
             }
         }
