@@ -802,7 +802,7 @@ int main(int argc, char *argv[])
     } while (!g_cs->connected());
 
     /* Send FEAT packet */
-    char feat_packet[6] = { MRCS_FEAT, 3, 0, 0, 0, g_feats };
+    char feat_packet[6] = { MRCS_FEAT, 3, 0, 0, 0, (char)g_feats };
     g_cs->write(feat_packet, 6, true);
 
 #ifdef WITH_AUDIO
