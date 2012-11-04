@@ -832,15 +832,6 @@ static void restart_game(void)
         }
     }
 
-    g_time_start = time_now();
-    g_timestamp = 0;
-    g_deadline = -1;
-
-    for (int n = 0; n < MAX_CLIENTS; ++n) g_clients[n].zombie = false;
-
-    /* Early out: if nobody is connected, don't bother with the rest. */
-    if (g_num_clients == 0) return;
-
     /* Update scores, only if somebody moved: */
     if (g_deadline > 0)
     {
@@ -856,6 +847,15 @@ static void restart_game(void)
             pl->score_holes = 0;
         }
     }
+
+    g_time_start = time_now();
+    g_timestamp = 0;
+    g_deadline = -1;
+
+    for (int n = 0; n < MAX_CLIENTS; ++n) g_clients[n].zombie = false;
+
+    /* Early out: if nobody is connected, don't bother with the rest. */
+    if (g_num_clients == 0) return;
 
     /* Find players for the next game */
     g_num_players = 0;
