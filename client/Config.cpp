@@ -351,5 +351,5 @@ bool Config::save_settings(const char *path)
         }
         ofs << "player:" << n << '=' << (int)active << '\n';
     }
-    return ofs;
+    return bool{ofs};
 }
