@@ -802,14 +802,18 @@ static void handle_MOVE(Client *cl, unsigned char *buf, size_t len)
 
 static void restart_game(void)
 {
-    /* Write a bitmap, but only if somebody move in this game: */
+    /* Write a bitmap, but only if somebody moved in this game: */
     if (g_deadline > 0 && BITMAP_DIR[0] != '\0')
     {
         char path[MAX_PATH];
 
         /* Dump field to BMP image */
-        snprintf(path, sizeof(path), "%s/field-%08x.bmp", BITMAP_DIR, g_gameid);
-        if (bmp_write(path, &g_field[0][0], FIELD_SIZE, FIELD_SIZE))
+        if ((size_t) snprintf( path, sizeof(path), "%s/field-%08x.bmp",
+                               BITMAP_DIR, g_gameid ) >= sizeof(path))
+        {
+            warn("BMP file path too long");
+        }
+        else if (bmp_write(path, &g_field[0][0], FIELD_SIZE, FIELD_SIZE))
         {
             info("field dumped to file \"%s\"", path);
         }
@@ -951,39 +955,46 @@ static void restart_game(void)
     if (REPLAY_DIR[0] != '\0')
     {
         /* Open replay file for new game */
-        snprintf( replay_path, sizeof(replay_path),
-                  "%s/game-%08x.txt", REPLAY_DIR, g_gameid );
-        fp_replay = fopen(replay_path, "wt");
-        if (fp_replay != NULL)
+        if ((size_t) snprintf( replay_path, sizeof(replay_path),
+                               "%s/game-%08x.txt", REPLAY_DIR, g_gameid )
+                >= sizeof(replay_path))
         {
-            info("opened replay file \"%s\"", replay_path);
-
-            /* Write header */
-            fprintf( fp_replay, "%d %u %d\n",
-                     1, g_gameid, g_num_players );
-            fprintf( fp_replay, "%d %d %d %d %d %d %d %d %d\n",
-                     SERVER_FPS, TURN_RATE, MOVE_RATE, LINE_WIDTH, WARMUP_TIME,
-                     HOLE_PROBABILITY, HOLE_LENGTH_MIN, HOLE_LENGTH_MAX,
-                     HOLE_COOLDOWN );
-
-            for (int n = 0; n < g_num_players; ++n)
-            {
-                fprintf(fp_replay, "%s\n", g_players[n]->name);
-            }
-            for (int n = 0; n < g_num_players; ++n)
-            {
-                fprintf( fp_replay, "%d %d %d %d %d %d\n",
-                         (int)g_players[n]->pos.x,
-                         (int)g_players[n]->pos.y,
-                         (int)g_players[n]->pos.a,
-                         (int)g_players[n]->color.r,
-                         (int)g_players[n]->color.g,
-                         (int)g_players[n]->color.b );
-            }
+            warn("replay file path too long");
         }
         else
         {
-            warn("could not open file \"%s\" for writing", replay_path);
+            fp_replay = fopen(replay_path, "wt");
+            if (fp_replay == NULL)
+            {
+                warn("could not open file \"%s\" for writing", replay_path);
+            }
+            else
+            {
+                info("opened replay file \"%s\"", replay_path);
+
+                /* Write header */
+                fprintf( fp_replay, "%d %u %d\n",
+                         1, g_gameid, g_num_players );
+                fprintf( fp_replay, "%d %d %d %d %d %d %d %d %d\n",
+                         SERVER_FPS, TURN_RATE, MOVE_RATE, LINE_WIDTH,
+                         WARMUP_TIME, HOLE_PROBABILITY, HOLE_LENGTH_MIN,
+                         HOLE_LENGTH_MAX, HOLE_COOLDOWN );
+
+                for (int n = 0; n < g_num_players; ++n)
+                {
+                    fprintf(fp_replay, "%s\n", g_players[n]->name);
+                }
+                for (int n = 0; n < g_num_players; ++n)
+                {
+                    fprintf( fp_replay, "%d %d %d %d %d %d\n",
+                             (int)g_players[n]->pos.x,
+                             (int)g_players[n]->pos.y,
+                             (int)g_players[n]->pos.a,
+                             (int)g_players[n]->color.r,
+                             (int)g_players[n]->color.g,
+                             (int)g_players[n]->color.b );
+                }
+            }
         }
     }
 
